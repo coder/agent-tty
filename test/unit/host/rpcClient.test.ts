@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import net from 'node:net';
 import process from 'node:process';
+import { setTimeout } from 'node:timers/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -123,6 +124,89 @@ describe('sendRpc abort handling', () => {
           resolve();
         });
       });
+    }
+  });
+});
+
+describe('sendRpc wait for the host', () => {
+  const WAIT_MS = 800;
+  const SHORT_WAIT_MS = 100;
+  const BYTE_INTERVAL_MS = 250;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-client-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  // A host that answers `ping` after `bytes` spaces, one every 250 ms.
+  async function listen(bytes: number): Promise<net.Server> {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', (request: Buffer) => {
+        const { id } = JSON.parse(request.toString('utf8')) as { id: string };
+        void (async () => {
+          for (let sent = 0; sent < bytes; sent += 1) {
+            await setTimeout(BYTE_INTERVAL_MS);
+            socket.write(' ');
+          }
+          await setTimeout(BYTE_INTERVAL_MS);
+          socket.end(
+            `${JSON.stringify({ id, ok: true, result: { ok: 1 } })}\n`,
+          );
+        })();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(socketFile, () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    return server;
+  }
+
+  async function close(server: net.Server): Promise<void> {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  }
+
+  it('waits again after each byte of the host, so a slow host that sends bytes can take longer than the wait', async () => {
+    // The answer comes after 1,500 ms, and a byte comes every 250 ms.
+    const server = await listen(5);
+    try {
+      await expect(
+        sendRpc(join(tempDir, 'rpc.sock'), 'ping', {}, WAIT_MS),
+      ).resolves.toEqual({ ok: 1 });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('fails with HOST_TIMEOUT after the wait without a byte', async () => {
+    // The answer comes after 250 ms with no byte before it.
+    const server = await listen(0);
+    try {
+      const error = await sendRpc(
+        join(tempDir, 'rpc.sock'),
+        'ping',
+        {},
+        SHORT_WAIT_MS,
+      ).catch((rejection: unknown) => rejection);
+      expect(error).toMatchObject({
+        code: 'HOST_TIMEOUT',
+        details: { method: 'ping', timeoutMs: SHORT_WAIT_MS },
+      });
+    } finally {
+      await close(server);
     }
   });
 });

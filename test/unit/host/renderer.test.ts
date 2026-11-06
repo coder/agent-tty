@@ -7,9 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HostRendererManager } from '../../../src/host/renderer.js';
 import type { RendererBackend } from '../../../src/renderer/backend.js';
+import { iterateInRangeReplayEvents } from '../../../src/renderer/replayEvents.js';
 import type {
   RenderProfileConfig,
   ReplayInput,
+  ReplayState,
 } from '../../../src/renderer/types.js';
 
 import {
@@ -474,5 +476,276 @@ describe('HostRendererManager', () => {
           backendFactory: null as unknown as BackendFactory,
         }),
     ).toThrow('backendFactory must be a function');
+  });
+});
+
+describe('HostRendererManager replay progress', () => {
+  let sessionDir: string;
+  let backends: FakeRendererBackend[];
+  let appliedByBackend: number[][];
+  // One entry for each `replayTo` call that waits for the test to let it go.
+  let pendingReplays: ReturnType<typeof createDeferred<undefined>>[];
+  let holdReplays: boolean;
+  let backendFactory: ReturnType<typeof vi.fn<BackendFactory>>;
+
+  function createLongInput(eventCount: number): ReplayInput {
+    return createReplayInput({
+      events: Array.from({ length: eventCount }, (_, seq) => ({
+        seq,
+        ts: '2026-03-20T12:00:00.000Z',
+        type: 'output' as const,
+        payload: { data: 'x' },
+      })),
+      targetSeq: eventCount - 1,
+    });
+  }
+
+  // A backend that replays as the real ones do: it holds a position, skips the
+  // events that it holds and ends at the last event that it replays.
+  function createReplayingBackend(): FakeRendererBackend {
+    const backend = createFakeBackend();
+    const applied: number[] = [];
+    appliedByBackend.push(applied);
+    let lastAppliedSeq = -1;
+    const replay = (input: ReplayInput): ReplayState => {
+      for (const event of iterateInRangeReplayEvents(input, lastAppliedSeq)) {
+        applied.push(event.seq);
+        lastAppliedSeq = event.seq;
+      }
+      return {
+        lastSeq: lastAppliedSeq,
+        cols: input.initialCols,
+        rows: input.initialRows,
+        cursorRow: 0,
+        cursorCol: 0,
+      };
+    };
+    const replayToMock = vi.fn((input: ReplayInput): Promise<ReplayState> => {
+      if (!holdReplays) {
+        return Promise.resolve(replay(input));
+      }
+      const hold = createDeferred<undefined>();
+      pendingReplays.push(hold);
+      return hold.promise.then(() => replay(input));
+    });
+    backend.replayTo = replayToMock;
+    backend.replayToMock = replayToMock;
+    return backend;
+  }
+
+  // Let the replays go that wait now, one by one, until `done` reads true.
+  async function releaseReplaysUntil(done: () => boolean): Promise<void> {
+    for (let round = 0; round < 1_000 && !done(); round += 1) {
+      await flushAsyncQueue();
+      pendingReplays.shift()?.resolve(undefined);
+    }
+    expect(done()).toBe(true);
+  }
+
+  function createManager(): HostRendererManager {
+    return new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+  }
+
+  beforeEach(async () => {
+    // oxfmt-ignore
+    sessionDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-')));
+    backends = [];
+    appliedByBackend = [];
+    pendingReplays = [];
+    holdReplays = false;
+    backendFactory = vi.fn(() => {
+      const backend = createReplayingBackend();
+      backends.push(backend);
+      return backend;
+    });
+  });
+
+  afterEach(async () => {
+    await rm(sessionDir, { recursive: true, force: true });
+  });
+
+  it('reports progress each time a replay of a long log moves forward', async () => {
+    const manager = createManager();
+    const onProgress = vi.fn();
+
+    await manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(300),
+      () => undefined,
+      onProgress,
+    );
+
+    const replayCalls = getCreatedBackend(backends, 0).replayToMock.mock.calls;
+    expect(replayCalls.length).toBeGreaterThan(1);
+    // The boot, and each call of `replayTo`.
+    expect(onProgress).toHaveBeenCalledTimes(1 + replayCalls.length);
+    expect(appliedByBackend[0]).toEqual(
+      Array.from({ length: 300 }, (_, seq) => seq),
+    );
+  });
+
+  it('reports progress when the backend has booted, before its first slice is done', async () => {
+    const manager = createManager();
+    holdReplays = true;
+    const onProgress = vi.fn();
+
+    const call = manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(300),
+      () => undefined,
+      onProgress,
+    );
+    await flushAsyncQueue();
+    await flushAsyncQueue();
+
+    // The first slice waits, and the boot is the only progress so far.
+    expect(pendingReplays).toHaveLength(1);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+
+    let finished = false;
+    void call.then(() => {
+      finished = true;
+    });
+    await releaseReplaysUntil(() => finished);
+  });
+
+  it('reports the progress of the replay ahead to a call that waits for it', async () => {
+    const manager = createManager();
+    holdReplays = true;
+    const aheadProgress = vi.fn();
+    const waitingProgress = vi.fn();
+    const waitingOperation = vi.fn();
+
+    const ahead = manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(300),
+      () => undefined,
+      aheadProgress,
+    );
+    const waiting = manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(300),
+      waitingOperation,
+      waitingProgress,
+    );
+    await flushAsyncQueue();
+    await flushAsyncQueue();
+    expect(pendingReplays).toHaveLength(1);
+
+    pendingReplays.shift()?.resolve(undefined);
+    await flushAsyncQueue();
+    await flushAsyncQueue();
+
+    // The call ahead has booted the backend and replayed its first slice. The
+    // other call has not begun, and it hears of both.
+    expect(aheadProgress).toHaveBeenCalledTimes(2);
+    expect(waitingProgress).toHaveBeenCalledTimes(2);
+    expect(waitingOperation).not.toHaveBeenCalled();
+
+    let finished = false;
+    void Promise.all([ahead, waiting]).then(() => {
+      finished = true;
+    });
+    await releaseReplaysUntil(() => finished);
+  });
+
+  it('reports nothing once a replay stops, and a call that finished hears nothing more', async () => {
+    const manager = createManager();
+    holdReplays = true;
+    const onProgress = vi.fn();
+
+    const stuck = manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(300),
+      () => undefined,
+      onProgress,
+    );
+    for (let slice = 0; slice < 2; slice += 1) {
+      await flushAsyncQueue();
+      pendingReplays.shift()?.resolve(undefined);
+    }
+    await flushAsyncQueue();
+    await flushAsyncQueue();
+    // The boot and two slices.
+    expect(onProgress).toHaveBeenCalledTimes(3);
+
+    // The third slice never ends.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(onProgress).toHaveBeenCalledTimes(3);
+    expect(pendingReplays).toHaveLength(1);
+
+    let finished = false;
+    void stuck.then(() => {
+      finished = true;
+    });
+    await releaseReplaysUntil(() => finished);
+    const finalCount = onProgress.mock.calls.length;
+
+    // Another call replays more events. The finished call is not told.
+    holdReplays = false;
+    await manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(600),
+      () => undefined,
+    );
+    expect(onProgress).toHaveBeenCalledTimes(finalCount);
+  });
+
+  it('replays only the new events when the backend already holds the earlier ones', async () => {
+    const manager = createManager();
+
+    await manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(300),
+      () => undefined,
+    );
+    const replayCalls = getCreatedBackend(backends, 0).replayToMock.mock.calls;
+    const callsBefore = replayCalls.length;
+    await manager.withBackend(
+      'ghostty-web',
+      createProfile(),
+      () => createLongInput(400),
+      () => undefined,
+    );
+
+    const secondFirstSlice = replayCalls[callsBefore]?.[0] as ReplayInput;
+    expect(secondFirstSlice.events[0]?.seq).toBe(300);
+    expect(appliedByBackend[0]).toEqual(
+      Array.from({ length: 400 }, (_, seq) => seq),
+    );
+  });
+
+  it('replays a new backend from the first event', async () => {
+    const manager = createManager();
+
+    await manager.withBackend(
+      'ghostty-web',
+      createProfile('first'),
+      () => createLongInput(300),
+      () => undefined,
+    );
+    // A change of profile replaces the backend, which holds nothing yet.
+    await manager.withBackend(
+      'ghostty-web',
+      createProfile('second'),
+      () => createLongInput(400),
+      () => undefined,
+    );
+
+    expect(backends).toHaveLength(2);
+    expect(appliedByBackend[1]).toEqual(
+      Array.from({ length: 400 }, (_, seq) => seq),
+    );
   });
 });

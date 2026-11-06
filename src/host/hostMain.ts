@@ -393,7 +393,10 @@ export async function runHost(
     appendMouseEvent: (payload) => eventLog.append('input_mouse', payload),
   });
 
-  const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
+  const replayRendererThroughSeq = async (
+    targetSeq: number,
+    keepAlive: () => void,
+  ): Promise<void> => {
     invariant(
       Number.isInteger(targetSeq) && targetSeq >= 0,
       'targetSeq must be a non-negative integer',
@@ -421,6 +424,7 @@ export async function runHost(
           'renderer snapshot must include the run-complete event sequence',
         );
       },
+      keepAlive,
     );
   };
 
@@ -638,7 +642,7 @@ export async function runHost(
         rendererBootInFlight,
       };
     },
-    snapshot: async (params: unknown) => {
+    snapshot: async (params: unknown, context) => {
       const {
         format: requestedFormat,
         includeScrollback: requestedIncludeScrollback,
@@ -672,6 +676,7 @@ export async function runHost(
           }),
           rendererBackend: backend.rendererBackend,
         }),
+        context.keepAlive,
       );
       return await captureSnapshotResult({
         sessionDir: sessDir,
@@ -681,7 +686,7 @@ export async function runHost(
         expectedSessionId: sessionId,
       });
     },
-    screenshot: async (params: unknown) => {
+    screenshot: async (params: unknown, context) => {
       const {
         profile: requestedProfileName,
         rendererName: requestedRendererName,
@@ -721,6 +726,7 @@ export async function runHost(
             expectedSessionId: sessionId,
             ...(showCursor === undefined ? {} : { showCursor }),
           }),
+        context.keepAlive,
       );
     },
     type: async (params: unknown) => {
@@ -822,7 +828,7 @@ export async function runHost(
 
       if (waitResult.kind === 'completed') {
         try {
-          await replayRendererThroughSeq(waitResult.seq);
+          await replayRendererThroughSeq(waitResult.seq, context.keepAlive);
         } catch {
           // The run already completed and was committed to the event log. Do not
           // turn a best-effort renderer catch-up failure into a command retry
