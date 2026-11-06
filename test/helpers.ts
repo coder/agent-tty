@@ -238,6 +238,24 @@ export function createSession(
   return envelope.result.sessionId;
 }
 
+// An interactive bash for a test. `--norc --noprofile` keep it from reading
+// ~/.bashrc and ~/.profile: a startup file that prompts, prints or ends the
+// shell breaks the commands that the test types (a mise "Trust them?" prompt
+// swallowed one).
+export const HERMETIC_BASH = ['/bin/bash', '--norc', '--noprofile', '-i'];
+
+// Like createSession with HERMETIC_BASH. HISTFILE=/dev/null keeps the shell
+// from reading or writing ~/.bash_history.
+export function createBashSession(
+  testHome: string,
+  options: CreateSessionOptions = {},
+): string {
+  return createSession(testHome, HERMETIC_BASH, {
+    ...options,
+    env: { HISTFILE: '/dev/null', ...options.env },
+  });
+}
+
 export function destroySession(testHome: string, sessionId: string): void {
   if (sessionId.length === 0) {
     return;

@@ -11,6 +11,7 @@ import type { CommandErrorEnvelope } from '../../src/protocol/envelope.js';
 
 import {
   cleanupHome,
+  createBashSession,
   createSession,
   destroySession,
   runCli,
@@ -170,7 +171,7 @@ describe('batch command integration', { timeout: 45_000 }, () => {
   });
 
   it('reads the step array from --file', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(500);
 
     const stepsPath = join(testHome, 'plan.json');
