@@ -57,8 +57,12 @@ export function generateAsciicast(
     manifest.sessionId === sessionId,
     'manifest sessionId must match the export sessionId',
   );
-  invariant(manifest.cols > 0, 'manifest cols must be positive');
-  invariant(manifest.rows > 0, 'manifest rows must be positive');
+  // The header names the size that the first output was written at: the
+  // creation size, as in `buildReplayInput`. Later sizes arrive as `r` lines.
+  const initialCols = manifest.creationCols ?? manifest.cols;
+  const initialRows = manifest.creationRows ?? manifest.rows;
+  invariant(initialCols > 0, 'initial cols must be positive');
+  invariant(initialRows > 0, 'initial rows must be positive');
 
   const fallbackTimestampMs = parseTimestamp(
     manifest.createdAt,
@@ -82,8 +86,8 @@ export function generateAsciicast(
 
   const header: AsciicastHeader = {
     version: 2,
-    width: manifest.cols,
-    height: manifest.rows,
+    width: initialCols,
+    height: initialRows,
     timestamp: Math.floor(firstTimestampMs / 1000),
     title: sessionId,
     sessionId,
