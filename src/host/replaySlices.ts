@@ -83,9 +83,9 @@ export async function replayInSlices(
 
   while (end - next > size) {
     const startedAt = now();
-    // Keep the target of the whole replay: the backend then ends at the last
-    // event of the slice, as it does for any events, and never moves past it.
-    // (It would not rewind to a target below the position of the backend.)
+    // The slice keeps the target of the whole replay. A lower target would
+    // fail on a backend that is ahead of `appliedSeq`, which cannot rewind.
+    // The backend ends at the last event that it replays, not at the target.
     const state = await backend.replayTo({
       ...input,
       events: events.slice(next, next + size),
