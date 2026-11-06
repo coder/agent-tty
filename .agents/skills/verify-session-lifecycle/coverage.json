@@ -178,6 +178,7 @@
     ],
     "writeTextFileAtomic": [
       "src/cli/commands/record-export.ts#runRecordExportCommand",
+      "src/cli/commands/record-export.ts#runRecordExportCommand",
       "src/snapshot/capture.ts#persistSnapshotArtifact",
       "src/storage/homeRegistry.ts#defaultDependencies>writeAtomic",
       "src/storage/manifests.ts#writeValidatedJsonFile"

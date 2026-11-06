@@ -61,6 +61,7 @@ agent-tty --home <path> snapshot <session-id> --format text --json
 agent-tty --home <path> screenshot <session-id> --json
 agent-tty --home <path> record export <session-id> --format asciicast --json
 agent-tty --home <path> record export <session-id> --format webm --json
+agent-tty --home <path> record export <session-id> --format svg --json
 ```
 
 Every command that runs checks the Node version against the `engines.node` range in `package.json`. Help output, usage errors and invalid global options skip the check. On a Node outside that range, a prerelease build included, the command still runs and writes a warning to stderr, so stdout keeps one JSON envelope. `--log-level error` hides the warning. `doctor` fails its `node-runtime` check against the same range.
@@ -259,7 +260,7 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whol
 Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
 Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
 
-On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast or a blank WebM of the session's size, with `durationMs: 0`. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png` and `recording--1-<format>.<ext>`.
+On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast, a blank WebM or a blank SVG of the session's size, with `durationMs: 0`. An animated SVG of such a session reports `durationMs: 1000`, the hold of its one blank frame. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png`, `recording--1-<format>.<ext>` and `recording--1-svg-<profile>[-animated].svg`.
 
 The screenshot hides the cursor unless you pass `--show-cursor`. `--hide-cursor` is the default, and the result reports `cursorVisible` for the choice.
 
@@ -269,6 +270,8 @@ agent-tty screenshot <session-id> --show-cursor --json
 agent-tty screenshot <session-id> --out ./proof.png --json
 agent-tty record export <session-id> --format asciicast --out ./session.cast --json
 agent-tty record export <session-id> --format webm --timing accelerated --out ./session.webm --json
+agent-tty record export <session-id> --format svg --json
+agent-tty record export <session-id> --format svg --animate --out ./session.svg --json
 ```
 
 `--out <path>` on `screenshot` and `record export` writes the file to that path, so it outlives the Home. A relative path resolves against the working directory, and a file already at the path is replaced. Missing parent folders are created, like `mkdir -p`, and they stay when the capture fails afterwards. A parent you cannot write to or search, or a path inside the Home's `sessions/` folder, fails with `EXPORT_ERROR` (exit 7) before the capture. agent-tty checks the folders it would create against `sessions/` before it creates any. If a parent folder is swapped during that step, one empty folder can be left in the other place. agent-tty checks the parent folder again just before it moves the file into place. If the folder was replaced or removed, the command fails with `EXPORT_ERROR` (exit 7) and does not write the file. This holds even when the new folder is a fine place for the file: a script that runs `rm -rf out && mkdir out` while an export of `out/proof.png` runs gets exit 7. A replacement after that check and before the move is not caught. A replacement during the write, also one that is undone before the check, can leave a `<file>.tmp-<id>` temp file in the folder that was at that path during the write. `screenshot --out` still records the capture in the session's artifact manifest and returns the `--out` path as `artifactPath`. When the copy to `--out` fails, `screenshot` removes that capture and its manifest entry again. A second `record export` to the same path, the default path at the same sequence or the same `--out`, replaces the manifest entry of the first. When the file changed between the second export's write and its manifest update, for example when a file server set a new modification time, both entries stay. When another export or a tool left a file of another size at the path in that time, the export exits 0 and adds no manifest entry, because its bytes are gone.
@@ -290,6 +293,18 @@ agent-tty record export <session-id> --format webm --json | jq -c '.result.missi
 ```
 
 WebM export replays with recorded wall-clock timing by default. Pass `--timing accelerated` (idle gaps clamped to 400ms) or `--timing max-speed` for a time-compressed video.
+
+SVG export renders styled grid frames from the event log through the native `libghostty-vt` backend with no browser and no ffmpeg, so it requires the optional `@coder/libghostty-vt-node` package (there is no `ghostty-web` fallback). The output is deterministic: exporting the same session twice produces byte-identical, diffable SVG. `--format svg` writes a still image of the final screen and ignores event timing, so it also works on a log whose clock stepped backward (`--animate` refuses such a log and names the event where the clock stepped back); add `--animate` for an animated SVG of de-duplicated frames replayed with recorded event-log timing (`--timing` is not supported with SVG).
+
+Animated SVG capture retains every distinct frame's styled grid in memory, so it is bounded by a total-cell budget (the V8 heap limit divided by 400 bytes, at most 20M cells or roughly 10,000 distinct 80x24 frames, adapting to terminal size); recordings that exceed it fail with a clear error suggesting a still SVG or WebM export instead. The SVG text is also bounded (the V8 heap limit divided by 8 bytes, at most 2^28 characters or about 268 MB of mostly ASCII text), so a dense, colorful animation that fits the cell budget can still fail with the same kind of error.
+
+SVG exports always embed the pinned JetBrains Mono latin subset. They also embed Symbols Nerd Font Mono, Noto Sans Symbols 2 and Noto Sans Math, each only when a rendered glyph needs it. The SVG uses the same font stack as the reference renderer, so a glyph outside the first two faces renders with the viewer's `monospace` font first, and with an embedded Noto face when that font lacks it. Glyphs in no bundled face (notably CJK and most emoji) render with the viewer's fonts. Text content and layout metrics stay deterministic even when fallback glyph shapes vary: every text run is pinned to the terminal grid via `textLength`, so columns never shift.
+
+SVG export has known fidelity limits, because the native backend's snapshot cells do not yet carry every attribute ([coder/libghostty-vt-node#15](https://github.com/coder/libghostty-vt-node/issues/15)):
+
+- **Only bold, italic, underline, and foreground/background colors are rendered.** Reverse video (SGR 7), strikethrough (SGR 9), dim (SGR 2), and hidden text (SGR 8) render as plain text, so hidden text stays visible. Reverse video is the one most often visible in TUIs (selection bars, status lines, fuzzy-finder highlights). Use a PNG screenshot or WebM export when those attributes matter.
+- **The cursor is always drawn.** SVG frames show a block cursor even after the application hides it with `ESC[?25l`. PNG screenshots hide the cursor unless you pass `--show-cursor`.
+- **Viewers without SMIL show only the final frame.** Animated SVGs play in browsers. Viewers that ignore SMIL animation (librsvg-based previews, Inkscape) show the final frame as a still image.
 
 Use `--renderer ghostty-web`, `AGENT_TTY_RENDERER=ghostty-web`, or Home `config.json` `{ "defaultRenderer": "ghostty-web" }` to force legacy all-browser rendering. Use `--renderer libghostty-vt` only when you intentionally want semantic and screenshot requests routed through the native backend; WebM requests still record `ghostty-web` as the actual video producer.
 

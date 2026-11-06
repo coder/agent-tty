@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory converts a session's event log into recording exports. `generateAsciicast` builds an asciicast v2 recording as a string and leaves the file write to the caller. `generateWebmExport` replays the events into a video-capable renderer backend (by default `GhosttyWebBackend`, which runs headless Chromium) and saves the recorded WebM video at the requested path.
+This directory converts a session's event log into recording exports. `generateAsciicast` builds an asciicast v2 recording as a string and leaves the file write to the caller. `generateWebmExport` replays the events into a video-capable renderer backend (by default `GhosttyWebBackend`, which runs headless Chromium) and saves the recorded WebM video at the requested path. `renderGridFramesToSvg` turns styled grid frames into SVG text, still or animated, and leaves the file write to the caller.
 
 ## Interface
 
@@ -13,6 +13,7 @@ This directory converts a session's event log into recording exports. `generateA
 - `WebmExportDeps`: optional `backendFactory` and `replayTimeoutMs`, for tests and callers that supply their own backend [webm.ts:WebmExportDeps].
 - `WebmExportResult`: `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount`, `cols`, `rows`, `profileName`, `timingMode` and `rendererBackend`, plus the optional `missingGlyphs` and `missingGlyphsTruncated` of `RecordedGlyphFields` [webm.ts:WebmExportResult].
 - `generateWebmExport(options, deps?)` returns a `Promise<WebmExportResult>` [webm.ts:generateWebmExport].
+- `renderGridFramesToSvg({ profile, frames, animate, heapSizeLimit? })` returns SVG text from styled grid frames, which `captureGridFrames` in `src/replay/gridFrames.ts` builds. It runs synchronously and leaves the file write to the caller [svg.ts:renderGridFramesToSvg].
 
 ## Invariants
 
@@ -26,10 +27,12 @@ This directory converts a session's event log into recording exports. `generateA
 - The default backend factory accepts only `ghostty-web` [webm.ts:createDefaultBackend].
 - Timing presets: `accelerated` caps gaps at 400 ms and holds frames at least 100 ms. `max-speed` holds frames at least 16 ms. Each mode holds the final frame (1000 ms, or 500 ms for `max-speed`) [webm.ts:buildReplayTimingOptions].
 - The timed replay fails after `REPLAY_TIMEOUT_MS` (5 minutes) [webm.ts:REPLAY_TIMEOUT_MS].
+- `renderGridFramesToSvg` needs the profile font size `SVG_FONT_SIZE` (14) and draws fixed 8.4x18 px cells, so equal input gives byte-identical output [svg.ts:renderGridFramesToSvg]. It always embeds the JetBrains Mono subset, and embeds each other bundled face only when a glyph needs it [svg.ts:embeddedFontAssets]. Output past `defaultMaxSvgOutputLength` of the V8 heap limit (the heap limit divided by 8 bytes, at most `MAX_SVG_OUTPUT_LENGTH`) fails with `EXPORT_ERROR` [svg.ts:defaultMaxSvgOutputLength].
 
 ## Side Effects
 
 - `generateAsciicast`: none found in code. It returns the NDJSON text in `contents`.
+- `renderGridFramesToSvg`: none found in code. It returns the SVG text.
 - `generateWebmExport` creates a temporary video directory with `mkdtemp` under `os.tmpdir()` (prefix `agent-tty-webm-`) and sets its mode to `0o700` [webm.ts:generateWebmExport].
 - It builds the replay input with `buildReplayInput` from `src/host/replay.ts` and the profile with `resolveProfile` from `src/renderer/profiles.ts` [webm.ts:generateWebmExport].
 - The default backend is a `GhosttyWebBackend` that records video into the temporary directory [webm.ts:createDefaultBackend].
