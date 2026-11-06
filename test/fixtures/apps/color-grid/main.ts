@@ -3,6 +3,12 @@ import process from 'node:process';
 
 const RESET = '\u001b[0m';
 const HOLD_OPEN_MS = 1_200;
+// By default the fixture exits HOLD_OPEN_MS after its output. `wait --idle-ms`
+// refuses a session whose program has exited (SESSION_NOT_RUNNING), so a test
+// that needs a running session cannot race that exit. With
+// --wait-input-before-exit the fixture stays open until it reads any stdin
+// byte, which a test can leave unsent and let `destroy` end the session.
+const waitForInput = process.argv.includes('--wait-input-before-exit');
 
 const basicBackgrounds = [40, 41, 42, 43, 44, 45, 46, 47] as const;
 const brightBackgrounds = [100, 101, 102, 103, 104, 105, 106, 107] as const;
@@ -101,6 +107,14 @@ const lines = [
 ].join('\n');
 
 writeStdout(lines);
-setTimeout(() => {
-  process.exit(0);
-}, HOLD_OPEN_MS);
+
+if (waitForInput) {
+  process.stdin.once('data', () => {
+    process.exit(0);
+  });
+  process.stdin.resume();
+} else {
+  setTimeout(() => {
+    process.exit(0);
+  }, HOLD_OPEN_MS);
+}
