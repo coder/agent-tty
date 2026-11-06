@@ -2,7 +2,10 @@ import { writeFile } from 'node:fs/promises';
 
 import { vi } from 'vitest';
 
-import type { RendererBackend } from '../../src/renderer/backend.js';
+import type {
+  RendererBackend,
+  ScreenshotOptions,
+} from '../../src/renderer/backend.js';
 import type {
   ReplayInput,
   ReplayState,
@@ -20,10 +23,7 @@ export interface FakeBackendOptions {
   resultOverrides?: Partial<ScreenshotResult>;
   writePng?: boolean;
   fail?: Error;
-  onScreenshot?: (
-    outputPath: string,
-    options?: { showCursor?: boolean },
-  ) => void;
+  onScreenshot?: (outputPath: string, options?: ScreenshotOptions) => void;
 }
 
 export type FakeRendererBackend = RendererBackend & {
@@ -79,7 +79,7 @@ export function createFakeBackend(
   const screenshotMock = vi.fn(
     async (
       outputPath: string,
-      screenshotOptions?: { showCursor?: boolean },
+      screenshotOptions?: ScreenshotOptions,
     ): Promise<ScreenshotResult> => {
       options.onScreenshot?.(outputPath, screenshotOptions);
       if (options.fail !== undefined) {

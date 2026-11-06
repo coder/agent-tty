@@ -28,6 +28,7 @@ import type {
 } from '../types.js';
 import { SemanticSnapshotSchema } from '../types.js';
 import { iterateInRangeReplayEvents } from '../replayEvents.js';
+import { replayInSlices } from '../replaySlices.js';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '../../config/defaults.js';
 import { invariant, assertString, unreachable } from '../../util/assert.js';
 import { Logger, createProcessLogger } from '../../util/logger.js';
@@ -669,7 +670,12 @@ export class LibghosttyVtBackend implements MouseEncodingBackend {
 
     const fallback = await this.createFallbackBackend();
     try {
-      await fallback.replayTo(this.latestReplayInput);
+      options?.onReplayProgress?.();
+      // A cold renderer replays the whole log, which can take minutes: slice
+      // it, so that the caller hears of each slice.
+      await replayInSlices(fallback, this.latestReplayInput, -1, () => {
+        options?.onReplayProgress?.();
+      });
       return await fallback.screenshot(outputPath, options);
     } finally {
       await fallback.dispose();

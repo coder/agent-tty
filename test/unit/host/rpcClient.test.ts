@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import net from 'node:net';
 import process from 'node:process';
+import { setTimeout } from 'node:timers/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -127,6 +128,89 @@ describe('sendRpc abort handling', () => {
   });
 });
 
+describe('sendRpc wait for the host', () => {
+  const WAIT_MS = 800;
+  const SHORT_WAIT_MS = 100;
+  const BYTE_INTERVAL_MS = 250;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-client-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  // A host that answers `ping` after `bytes` spaces, one every 250 ms.
+  async function listen(bytes: number): Promise<net.Server> {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', (request: Buffer) => {
+        const { id } = JSON.parse(request.toString('utf8')) as { id: string };
+        void (async () => {
+          for (let sent = 0; sent < bytes; sent += 1) {
+            await setTimeout(BYTE_INTERVAL_MS);
+            socket.write(' ');
+          }
+          await setTimeout(BYTE_INTERVAL_MS);
+          socket.end(
+            `${JSON.stringify({ id, ok: true, result: { ok: 1 } })}\n`,
+          );
+        })();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(socketFile, () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    return server;
+  }
+
+  async function close(server: net.Server): Promise<void> {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  }
+
+  it('waits again after each byte of the host, so a slow host that sends bytes can take longer than the wait', async () => {
+    // The answer comes after 1,500 ms, and a byte comes every 250 ms.
+    const server = await listen(5);
+    try {
+      await expect(
+        sendRpc(join(tempDir, 'rpc.sock'), 'ping', {}, WAIT_MS),
+      ).resolves.toEqual({ ok: 1 });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('fails with HOST_TIMEOUT after the wait without a byte', async () => {
+    // The answer comes after 250 ms with no byte before it.
+    const server = await listen(0);
+    try {
+      const error = await sendRpc(
+        join(tempDir, 'rpc.sock'),
+        'ping',
+        {},
+        SHORT_WAIT_MS,
+      ).catch((rejection: unknown) => rejection);
+      expect(error).toMatchObject({
+        code: 'HOST_TIMEOUT',
+        details: { method: 'ping', timeoutMs: SHORT_WAIT_MS },
+      });
+    } finally {
+      await close(server);
+    }
+  });
+});
+
 describe('sendRpc response cap', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-client-'));
@@ -181,6 +265,188 @@ describe('sendRpc response cap', () => {
             resolve();
           });
         });
+      }
+    },
+  );
+});
+
+describe('sendRpc response cap with keep-alives', () => {
+  const MAX_CHARS = 67_108_864;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-client-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  // A host that writes each chunk that `chunksFor(id)` returns in a write of
+  // its own, 20 ms apart, once it has seen the request.
+  async function listenChunks(
+    chunksFor: (id: string) => string[],
+  ): Promise<net.Server> {
+    const server = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', (request: Buffer) => {
+        const { id } = JSON.parse(request.toString('utf8')) as { id: string };
+        void (async () => {
+          for (const chunk of chunksFor(id)) {
+            socket.write(chunk);
+            await setTimeout(20);
+          }
+          socket.end();
+        })();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(join(tempDir, 'rpc.sock'), () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    return server;
+  }
+
+  it('keeps the spaces at the start of a chunk inside the response', async () => {
+    const server = await listenChunks((id) => [
+      ' ',
+      ' ',
+      `{"id":${JSON.stringify(id)},"ok":true,"result":"a`,
+      '  b"}\n',
+    ]);
+    try {
+      const result = await sendRpc(
+        join(tempDir, 'rpc.sock'),
+        'ping',
+        {},
+        5_000,
+      );
+
+      expect(result).toBe('a  b');
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('takes a newline ahead of the response as an empty response line', async () => {
+    // Only a space is a keep-alive. A newline ends the line, so the response
+    // that follows it is never read.
+    const server = await listenChunks((id) => [
+      ' ',
+      '\n',
+      `{"id":${JSON.stringify(id)},"ok":true,"result":"a"}\n`,
+    ]);
+    try {
+      const error = await sendRpc(
+        join(tempDir, 'rpc.sock'),
+        'ping',
+        {},
+        5_000,
+      ).catch((rejection: unknown) => rejection);
+
+      expect(error).toMatchObject({ code: 'RPC_ERROR' });
+    } finally {
+      await close(server);
+    }
+  });
+
+  // A host that writes `keepAlives` spaces and then a success response line of
+  // `lineChars` characters, newline included. `sent.resultChars` is the length
+  // of the result in that line, once the host has seen the request.
+  async function listen(
+    keepAlives: number,
+    lineChars: number,
+    sameWrite: boolean,
+  ): Promise<{ server: net.Server; sent: { resultChars: number } }> {
+    const sent = { resultChars: 0 };
+    const server = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', (request: Buffer) => {
+        const { id } = JSON.parse(request.toString('utf8')) as { id: string };
+        const head = `{"id":${JSON.stringify(id)},"ok":true,"result":"`;
+        const tail = '"}\n';
+        sent.resultChars = lineChars - head.length - tail.length;
+        const line = `${head}${'x'.repeat(sent.resultChars)}${tail}`;
+        const spaces = ' '.repeat(keepAlives);
+        void (async () => {
+          if (sameWrite) {
+            socket.end(spaces + line);
+            return;
+          }
+          for (const space of spaces) {
+            socket.write(space);
+            await setTimeout(20);
+          }
+          socket.end(line);
+        })();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(join(tempDir, 'rpc.sock'), () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    return { server, sent };
+  }
+
+  async function close(server: net.Server): Promise<void> {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  }
+
+  it.each([
+    { name: 'in chunks of their own', sameWrite: false },
+    { name: 'in the same write as the response', sameWrite: true },
+  ])(
+    'takes a response of exactly 64 MiB after keep-alives that come $name',
+    { timeout: 30_000 },
+    async ({ sameWrite }) => {
+      // The host checks the response line alone, and the line is at its cap.
+      const { server, sent } = await listen(3, MAX_CHARS, sameWrite);
+      try {
+        const result = await sendRpc(
+          join(tempDir, 'rpc.sock'),
+          'ping',
+          {},
+          20_000,
+        );
+
+        expect(sent.resultChars).toBeGreaterThan(MAX_CHARS - 1_000);
+        expect(result).toHaveLength(sent.resultChars);
+      } finally {
+        await close(server);
+      }
+    },
+  );
+
+  it(
+    'refuses a response one character over 64 MiB after keep-alives',
+    { timeout: 30_000 },
+    async () => {
+      const { server } = await listen(3, MAX_CHARS + 1, false);
+      try {
+        const error = await sendRpc(
+          join(tempDir, 'rpc.sock'),
+          'ping',
+          {},
+          20_000,
+        ).catch((rejection: unknown) => rejection);
+
+        expect(error).toMatchObject({
+          code: 'PROTOCOL_ERROR',
+          retryable: false,
+          details: { method: 'ping', maxResponseChars: MAX_CHARS },
+        });
+      } finally {
+        await close(server);
       }
     },
   );

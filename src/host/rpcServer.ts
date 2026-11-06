@@ -44,9 +44,19 @@ const UNKNOWN_REQUEST_ID = 'unknown';
  *
  * `signal` aborts when the client socket closes, indicating the caller is no
  * longer waiting for a response.
+ *
+ * `keepAlive` tells the client that the handler is still making progress. It
+ * writes one space ahead of the response line. JSON allows whitespace before
+ * a value, so a client that does not know about it still parses the response,
+ * and every client restarts its inactivity timer on the byte (`sendRpc` waits
+ * for that long without a byte before it gives up). Call it only when work
+ * moved forward, never on a timer: a handler that hangs must go silent so
+ * that its client fails with HOST_TIMEOUT. It does nothing once the client is
+ * gone or the response is on its way.
  */
 export interface MethodContext {
   readonly signal: AbortSignal;
+  readonly keepAlive: () => void;
 }
 
 export type MethodHandler = (
@@ -491,9 +501,16 @@ export class RpcServer {
       socket.off('close', abortRequest);
     });
 
+    const keepAlive = (): void => {
+      if (socket.writable) {
+        socket.write(' ');
+      }
+    };
+
     try {
       const result = await handler(paramsResult.data, {
         signal: requestAbortController.signal,
+        keepAlive,
       });
       if (requestAbortController.signal.aborted) {
         return;

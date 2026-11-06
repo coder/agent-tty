@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import net from 'node:net';
+import { setTimeout } from 'node:timers/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -369,6 +370,168 @@ describe('RpcServer large success responses', () => {
       );
     },
   );
+});
+
+describe('RpcServer keep-alive', () => {
+  // A success result of the `snapshot` method, which is the smallest.
+  const snapshotResult = {
+    format: 'text',
+    sessionId: 'session-1',
+    capturedAtSeq: 1,
+    cols: 80,
+    rows: 24,
+    cursorRow: 0,
+    cursorCol: 0,
+    text: 'done',
+  };
+  const WAIT_FOR_KEEP_ALIVE_MS = 800;
+  const KEEP_ALIVE_INTERVAL_MS = 250;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-server-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  it('keeps a client waiting for as long as the handler reports progress', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = new RpcServer(socketFile, {
+      snapshot: async (_params, context) => {
+        // 1,250 ms in all, which is more than the 800 ms that the client waits
+        // for a byte, with a byte every 250 ms.
+        for (let round = 0; round < 5; round += 1) {
+          await setTimeout(KEEP_ALIVE_INTERVAL_MS);
+          context.keepAlive();
+        }
+        return snapshotResult;
+      },
+    });
+    await server.listen();
+
+    try {
+      await expect(
+        sendRpc(
+          socketFile,
+          'snapshot',
+          { format: 'text' },
+          WAIT_FOR_KEEP_ALIVE_MS,
+        ),
+      ).resolves.toMatchObject({ format: 'text', text: 'done' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('fails a client with HOST_TIMEOUT once the handler stops reporting progress', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = new RpcServer(socketFile, {
+      snapshot: async (_params, context) => {
+        context.keepAlive();
+        await setTimeout(KEEP_ALIVE_INTERVAL_MS);
+        context.keepAlive();
+        // The handler hangs until the client gives up.
+        await new Promise<void>((resolve) => {
+          context.signal.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        return snapshotResult;
+      },
+    });
+    await server.listen();
+
+    try {
+      const startedAt = performance.now();
+      const error = await sendRpc(
+        socketFile,
+        'snapshot',
+        { format: 'text' },
+        WAIT_FOR_KEEP_ALIVE_MS,
+      ).catch((rejection: unknown) => rejection);
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(error).toMatchObject({ code: 'HOST_TIMEOUT' });
+      // The wait started over at the last byte, 250 ms in.
+      expect(elapsedMs).toBeGreaterThanOrEqual(
+        KEEP_ALIVE_INTERVAL_MS + WAIT_FOR_KEEP_ALIVE_MS - 50,
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not cut a large response when the handler reports progress after it returned', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const text = 'x'.repeat(4_000_000);
+    const server = new RpcServer(socketFile, {
+      snapshot: (_params, context) => {
+        // The response is on its way when this runs. A byte now would be a
+        // write after the end of the socket, which destroys the socket with
+        // part of the response still unsent.
+        setImmediate(() => {
+          context.keepAlive();
+        });
+        return Promise.resolve({ ...snapshotResult, text });
+      },
+    });
+    await server.listen();
+
+    try {
+      await expect(
+        sendRpc(socketFile, 'snapshot', { format: 'text' }, 20_000),
+      ).resolves.toMatchObject({ format: 'text', text });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('sends only spaces ahead of the response line, so that an older client parses it', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = new RpcServer(socketFile, {
+      snapshot: async (_params, context) => {
+        context.keepAlive();
+        await setTimeout(20);
+        context.keepAlive();
+        await setTimeout(20);
+        context.keepAlive();
+        return snapshotResult;
+      },
+    });
+    await server.listen();
+
+    try {
+      const client = net.connect({ path: socketFile });
+      client.setEncoding('utf8');
+      let received = '';
+      client.on('data', (chunk: string) => {
+        received += chunk;
+      });
+      const ended = new Promise<void>((resolve, reject) => {
+        client.once('end', resolve);
+        client.once('error', reject);
+      });
+      client.write(
+        `${JSON.stringify({ id: 'request-1', method: 'snapshot', params: { format: 'text' } })}\n`,
+      );
+      await ended;
+
+      // The first line of the bytes is what a client before the keep-alive
+      // gave to JSON.parse.
+      const [line, rest] = received.split('\n');
+      expect(line?.startsWith('   {')).toBe(true);
+      expect(rest).toBe('');
+      expect(JSON.parse(line ?? '')).toMatchObject({
+        id: 'request-1',
+        ok: true,
+        result: { text: 'done' },
+      });
+    } finally {
+      await server.close();
+    }
+  });
 });
 
 describe('RpcServer waitForRender results', () => {

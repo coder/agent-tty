@@ -4,6 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { RendererBackend } from '../renderer/backend.js';
 import type { RendererName } from '../renderer/names.js';
 import { hashProfile } from '../renderer/profiles.js';
+import { replayInSlices } from '../renderer/replaySlices.js';
 import type { RenderProfileConfig, ReplayInput } from '../renderer/types.js';
 import { invariant } from '../util/assert.js';
 
@@ -45,6 +46,11 @@ export class HostRendererManager {
   private bootPromise: Promise<RendererBackend> | null = null;
   private lifecyclePromise: Promise<void> = Promise.resolve();
   private screenshotsDirectoryCreated = false;
+  // Where the last replay left the current backend. A mouse request can move
+  // the backend further, so this is where it was at least.
+  private appliedSeq = -1;
+  // One entry for each `withBackend` call that waits or runs.
+  private readonly progressListeners = new Set<{ notify: () => void }>();
 
   constructor(options: HostRendererManagerOptions) {
     assertNonEmptyString(options.sessionId, 'sessionId');
@@ -72,6 +78,19 @@ export class HostRendererManager {
     );
   }
 
+  /**
+   * Run `operation` on the current backend, after the replay to the input.
+   *
+   * `onProgress` runs each time a replay moves forward, the replay of this
+   * call or of an earlier call that this one waits for. A request passes its
+   * `keepAlive`, so that it does not time out while the work it needs goes on.
+   *
+   * `operation` gets `reportProgress` as its third argument. It tells every
+   * call that waits, this one included, that work moves forward, for an
+   * operation that is slow by itself (a libghostty-vt screenshot replays the
+   * log in a second renderer). A call that waits behind the operation hears
+   * of it only this way.
+   */
   async withBackend<T>(
     rendererName: RendererName,
     profile: RenderProfileConfig,
@@ -79,7 +98,9 @@ export class HostRendererManager {
     operation: (
       backend: RendererBackend,
       replayInput: ReplayInput | null,
+      reportProgress: () => void,
     ) => T | Promise<T>,
+    onProgress?: () => void,
   ): Promise<T> {
     assertNonEmptyString(rendererName, 'rendererName');
     assertNonEmptyString(profile.name, 'profile name');
@@ -91,7 +112,11 @@ export class HostRendererManager {
     // Load inside the lock: work queued earlier, such as a mouse request that
     // catches up to the whole log, can leave the backend past any input
     // captured before the wait, and a stateful backend cannot rewind.
-    return this.runExclusive(async () => {
+    const listener = onProgress === undefined ? null : { notify: onProgress };
+    if (listener !== null) {
+      this.progressListeners.add(listener);
+    }
+    const queued = this.runExclusive(async () => {
       const replayInput = loadReplayInput();
       if (replayInput !== null) {
         invariant(
@@ -111,15 +136,33 @@ export class HostRendererManager {
       }
 
       const backend = await this.ensureBackend(rendererName, profile);
+      // A booted backend is progress too: a replay starts only after the boot.
+      this.reportProgress();
 
       if (replayInput !== null) {
-        await backend.replayTo(replayInput);
+        await replayInSlices(backend, replayInput, this.appliedSeq, (state) => {
+          this.appliedSeq = state.lastSeq;
+          this.reportProgress();
+        });
         this.cachedInitialCols = replayInput.initialCols;
         this.cachedInitialRows = replayInput.initialRows;
       }
 
-      return await operation(backend, replayInput);
+      return await operation(backend, replayInput, () => {
+        this.reportProgress();
+      });
     });
+    return queued.finally(() => {
+      if (listener !== null) {
+        this.progressListeners.delete(listener);
+      }
+    });
+  }
+
+  private reportProgress(): void {
+    for (const listener of this.progressListeners) {
+      listener.notify();
+    }
   }
 
   screenshotPath(profileName: string): string {
@@ -248,6 +291,7 @@ export class HostRendererManager {
     this.currentProfileName = null;
     this.cachedInitialCols = null;
     this.cachedInitialRows = null;
+    this.appliedSeq = -1;
     this.bootPromise = null;
 
     if (backend === null) {
