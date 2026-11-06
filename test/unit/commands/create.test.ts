@@ -8,6 +8,11 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import type { SessionRecord } from '../../../src/protocol/schemas.js';
 
+// The readiness wait ends at a deadline on the monotonic clock. The mocked
+// delay moves a fake clock by the time it stands for, so a host that never
+// answers reaches that deadline at once.
+const clock = vi.hoisted(() => ({ nowMs: 0 }));
+
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
   writeHumanErrorLines: vi.fn(),
@@ -41,9 +46,11 @@ vi.mock('../../../src/host/socketRoot.js', () => ({
   ensureSocketRoot: mocks.ensureSocketRoot,
 }));
 
-// The readiness loop waits 100 ms between its 50 attempts.
 vi.mock('node:timers/promises', () => ({
-  setTimeout: () => Promise.resolve(),
+  setTimeout: (ms: number) => {
+    clock.nowMs += ms;
+    return Promise.resolve();
+  },
 }));
 
 vi.mock('../../../src/host/rpcClient.js', () => ({
@@ -118,6 +125,8 @@ describe('create command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clock.nowMs = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock.nowMs);
     mocks.allocateSession.mockImplementation(
       (_config: unknown, launch: (sessionId: string) => number) => {
         launch('session-01');
@@ -299,7 +308,7 @@ describe('create command', () => {
     );
   });
 
-  it('when the host never answers, tells the host to stop and reports the last error', async () => {
+  it('when a running host never answers, gives up at the deadline, tells the host to stop and reports the last error', async () => {
     const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
       message: 'host unreachable',
     });
@@ -315,9 +324,94 @@ describe('create command', () => {
       details: { sessionId: 'session-01' },
       cause: unreachable,
     });
-    expect(mocks.sendRpc).toHaveBeenCalledTimes(50);
+    expect(clock.nowMs).toBe(30_000);
     expect(mocks.stopHost).toHaveBeenCalledOnce();
     expect(mocks.emitSuccess).not.toHaveBeenCalled();
+  });
+
+  it('waits for a host that starts later than 10 s', async () => {
+    // 150 polls of 100 ms are 15 s, three times the 50 attempts that gave up
+    // on a slow host before.
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      mocks.sendRpc.mockRejectedValueOnce(
+        makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+          message: 'host unreachable',
+        }),
+      );
+    }
+
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.sendRpc).toHaveBeenCalledTimes(151);
+    expect(clock.nowMs).toBe(15_000);
+    expect(mocks.emitSuccess).toHaveBeenCalledOnce();
+    expect(mocks.writeCreateFailedMarker).not.toHaveBeenCalled();
+    expect(mocks.stopHost).not.toHaveBeenCalled();
+  });
+
+  it('gives up at once when the host has exited, with the same error', async () => {
+    const unreachable = makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+      message: 'host unreachable',
+    });
+    mocks.sendRpc.mockRejectedValue(unreachable);
+    mocks.isProcessAlive.mockReturnValueOnce(true).mockReturnValue(false);
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({
+      code: 'HOST_UNREACHABLE',
+      message: 'host unreachable',
+      details: { sessionId: 'session-01' },
+      cause: unreachable,
+    });
+
+    expect(mocks.isProcessAlive).toHaveBeenCalledWith(12345);
+    expect(mocks.sendRpc).toHaveBeenCalledTimes(2);
+    expect(clock.nowMs).toBe(100);
+    expect(mocks.stopHost).toHaveBeenCalledOnce();
+  });
+
+  it('gives up at once on a host that exited after a timed-out attempt', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_TIMEOUT, {
+        message: 'RPC request timed out after 100ms.',
+      }),
+    );
+    mocks.isProcessAlive.mockReturnValue(false);
+
+    await expect(
+      runCreateCommand({ ...baseOptions, context }),
+    ).rejects.toMatchObject({ code: 'HOST_TIMEOUT' });
+
+    expect(mocks.sendRpc).toHaveBeenCalledOnce();
+    expect(clock.nowMs).toBe(0);
+  });
+
+  it('reads the manifest after the host check, so a host that exited after it recorded the exit gives a result', async () => {
+    mocks.sendRpc.mockRejectedValue(
+      makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+        message: 'host unreachable',
+      }),
+    );
+    // The program exits and the host exits. Every write of the host came
+    // before its exit, so a manifest read after the host check sees `exited`.
+    mocks.isProcessAlive.mockReturnValue(false);
+    mocks.readManifestIfExists.mockImplementation(() =>
+      Promise.resolve(
+        makeManifest({
+          status: mocks.isProcessAlive.mock.results.some(
+            (result) => result.value === false,
+          )
+            ? 'exited'
+            : 'running',
+        }),
+      ),
+    );
+
+    await runCreateCommand({ ...baseOptions, context });
+
+    expect(mocks.emitSuccess).toHaveBeenCalledOnce();
+    expect(mocks.stopHost).not.toHaveBeenCalled();
   });
 
   it('writes the create-failed marker before it reads the manifest for the stop', async () => {
@@ -616,7 +710,11 @@ describe('create command', () => {
 
     it('stops retrying once the host has exited', async () => {
       mocks.writeCreateFailedMarker.mockRejectedValue(diskError);
-      mocks.isProcessAlive.mockReturnValueOnce(true).mockReturnValue(false);
+      // The host runs through the readiness wait and exits after the second
+      // marker write.
+      mocks.isProcessAlive.mockImplementation(
+        () => mocks.writeCreateFailedMarker.mock.calls.length < 2,
+      );
 
       await expect(
         runCreateCommand({ ...baseOptions, context }),
