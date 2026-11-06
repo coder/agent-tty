@@ -1725,7 +1725,7 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
   // 10,000 outputs with an input between each pair, 40 ms apart: 400 s of
   // recording. Without a budget, every output is a moment of its own and the
   // replay makes 10,000 flushes of a frame each, more than 5 minutes.
-  it('spreads max-speed flushes over a long recording, one per 133 ms of recorded time', async () => {
+  it('spreads max-speed flushes over a long recording, one per 167 ms of recorded time', async () => {
     const events: ReplayInput['events'] = [];
     for (let index = 0; index < 10_000; index += 1) {
       events.push(outputEvent(2 * index, 40 * index));
@@ -1734,10 +1734,10 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     events.push(exitEvent(20_000, 400_000));
     const flushes = await replayAndRecordFlushes(events, MAX_SPEED);
 
-    // A flush ends at the first event 133 ms after the first output of the
-    // batch, so each one takes 4 outputs (160 ms): about 2,500 flushes.
-    expect(flushes.length).toBeGreaterThan(2_000);
-    expect(flushes.length).toBeLessThanOrEqual(3_001);
+    // A flush ends at the first event 167 ms after the first output of the
+    // batch, so each one takes 5 outputs (200 ms): about 2,000 flushes.
+    expect(flushes.length).toBeGreaterThan(1_800);
+    expect(flushes.length).toBeLessThanOrEqual(2_401);
     // No output is lost or moved.
     expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
       events

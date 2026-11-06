@@ -139,13 +139,14 @@ const WASM_CONTENT_TYPE = 'application/wasm';
 const MAX_REPLAY_BATCH_SIZE = 1000;
 /**
  * A max-speed replay flushes at most about this many times, however long the
- * recording is. Every flush waits for one animation frame (17 to 25 ms) and
- * one page call, so a replay takes about 2 minutes at the limit. That stays
- * below the 5 minutes that a WebM export allows its replay, even on a slow
- * host. The video has 25 frames per second, so 3,000 flushes fill 2 minutes
- * of video: a viewer cannot tell more states apart.
+ * recording is. A flush costs one animation frame, one page call and one scan
+ * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 97 ms at 200x60 in the
+ * median of the sparse-log runs of PR 358 (host load 60 to 90). The limit then
+ * takes 1 to 4 minutes, under the 5 minutes that a WebM export allows its
+ * replay. The video has 25 frames per second, so a viewer cannot tell more
+ * than this many states apart in a video of that length.
  */
-const MAX_SPEED_FRAME_BUDGET = 3_000;
+const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
 
 let servedAssetsPromise: Promise<
