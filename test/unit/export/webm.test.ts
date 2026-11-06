@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   VideoCapableRendererBackend,
@@ -23,7 +23,10 @@ vi.mock('../../../src/renderer/profiles.js', () => ({
   resolveProfile: mocks.resolveProfile,
 }));
 
-import { generateWebmExport } from '../../../src/export/webm.js';
+import {
+  generateWebmExport,
+  WebmReplayTimeoutError,
+} from '../../../src/export/webm.js';
 
 function createManifest(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
@@ -514,7 +517,9 @@ describe('generateWebmExport', () => {
           replayTimeoutMs: 1,
         },
       ),
-    ).rejects.toThrow('WebM replay timed out after 5 minutes');
+    ).rejects.toThrow(
+      'WebM replay timed out after 1 ms (planned duration 2500 ms at recorded timing)',
+    );
 
     expect(mockBackend.finalizeVideo).not.toHaveBeenCalled();
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
@@ -543,4 +548,150 @@ describe('generateWebmExport', () => {
     );
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('generateWebmExport replay deadline', () => {
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
+  const BASE_TIME_MS = Date.parse('2026-03-19T12:00:00.000Z');
+
+  // Two output events, `spanMs` apart: the recording's whole length.
+  function useRecordingOfLength(spanMs: number): void {
+    mocks.buildReplayInput.mockReturnValue({
+      sessionId: 'session-01',
+      initialCols: 80,
+      initialRows: 24,
+      events: [
+        {
+          seq: 0,
+          type: 'output',
+          ts: new Date(BASE_TIME_MS).toISOString(),
+          payload: { data: 'start\n' },
+        },
+        {
+          seq: 1,
+          type: 'output',
+          ts: new Date(BASE_TIME_MS + spanMs).toISOString(),
+          payload: { data: 'end\n' },
+        },
+      ],
+      targetSeq: 1,
+    });
+  }
+
+  // Starts an export whose replay runs on fake timers. It takes `replayMs` of
+  // fake time, or never ends when `replayMs` is null.
+  async function startExport(
+    timingMode: 'recorded' | 'accelerated' | 'max-speed',
+    replayMs: number | null,
+  ) {
+    let markReplayStarted: () => void = () => undefined;
+    const replayStarted = new Promise<void>((resolve) => {
+      markReplayStarted = resolve;
+    });
+    const replayWithTiming = vi.fn(
+      (): Promise<ReturnType<typeof createReplayState>> => {
+        markReplayStarted();
+        return new Promise((resolve) => {
+          if (replayMs !== null) {
+            setTimeout(() => {
+              resolve(createReplayState());
+            }, replayMs);
+          }
+        });
+      },
+    );
+    const mockBackend = createMockBackend({ replayWithTiming });
+    let settled = false;
+    const outcome = generateWebmExport(
+      {
+        sessionId: 'session-01',
+        sessionDir: '/tmp/agent-tty/sessions/session-01',
+        manifest: createManifest(),
+        events: [],
+        outputPath: '/tmp/exports/recording-1-webm.webm',
+        timingMode,
+      },
+      { backendFactory: () => mockBackend.backend },
+    ).then(
+      (result) => {
+        settled = true;
+        return { result, error: undefined };
+      },
+      (error: unknown) => {
+        settled = true;
+        return { result: undefined, error };
+      },
+    );
+    await replayStarted;
+
+    return { outcome, mockBackend, isSettled: () => settled };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives a recording of more than 5 minutes the time that its plan needs', async () => {
+    useRecordingOfLength(6 * 60 * 1000);
+    // The replay waits out the recorded gap, then holds the final frame.
+    const { outcome, mockBackend } = await startExport(
+      'recorded',
+      6 * 60 * 1000 + 1_000,
+    );
+
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000 + 1_000);
+    const { result, error } = await outcome;
+
+    expect(error).toBeUndefined();
+    expect(result?.durationMs).toBe(6 * 60 * 1000);
+    expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the deadline within the longest delay that a timer runs', async () => {
+    useRecordingOfLength(30 * 24 * 60 * 60 * 1000);
+    const { outcome } = await startExport('recorded', 60_000);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    const { error } = await outcome;
+
+    expect(error).toBeUndefined();
+  });
+
+  it.each([
+    // The deadline is the planned duration plus 5 minutes. The plan is the
+    // recorded gap and the final frame hold, with the gap cut by the mode.
+    { timingMode: 'recorded', plannedDurationMs: 6 * 60 * 1000 + 1_000 },
+    { timingMode: 'accelerated', plannedDurationMs: 400 + 1_000 },
+    { timingMode: 'max-speed', plannedDurationMs: 500 },
+  ] as const)(
+    'stops a hung $timingMode replay once its plan and 5 minutes have passed',
+    async ({ timingMode, plannedDurationMs }) => {
+      useRecordingOfLength(6 * 60 * 1000);
+      const deadlineMs = plannedDurationMs + FIVE_MINUTES_MS;
+      const { outcome, mockBackend, isSettled } = await startExport(
+        timingMode,
+        null,
+      );
+
+      await vi.advanceTimersByTimeAsync(deadlineMs - 1);
+      expect(isSettled()).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      const { error } = await outcome;
+
+      expect(error).toBeInstanceOf(WebmReplayTimeoutError);
+      expect(error).toMatchObject({
+        timeoutMs: deadlineMs,
+        plannedDurationMs,
+        timingMode,
+        message: `WebM replay timed out after ${String(deadlineMs)} ms (planned duration ${String(plannedDurationMs)} ms at ${timingMode} timing)`,
+      });
+      expect(mockBackend.finalizeVideo).not.toHaveBeenCalled();
+      expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
+    },
+  );
 });

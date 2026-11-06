@@ -10,9 +10,10 @@ This directory converts a session's event log into recording exports. `generateA
 - `AsciicastExport`: `contents`, `header`, `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount` and `markerCount` [asciicast.ts:AsciicastExport].
 - `generateAsciicast(sessionId, manifest, events, toolVersion?)` returns an `AsciicastExport`. It runs synchronously [asciicast.ts:generateAsciicast].
 - `WebmExportOptions`: `sessionId`, `sessionDir`, `manifest`, `events`, `outputPath`, and optional `targetSeq`, `profileName`, `timingMode` and `rendererName` [webm.ts:WebmExportOptions].
-- `WebmExportDeps`: optional `backendFactory` and `replayTimeoutMs`, for tests and callers that supply their own backend [webm.ts:WebmExportDeps].
+- `WebmExportDeps`: optional `backendFactory` and `replayTimeoutMs`, for tests and callers that supply their own backend. `replayTimeoutMs` replaces the replay deadline that is derived from the plan (see Invariants) [webm.ts:WebmExportDeps].
 - `WebmExportResult`: `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount`, `cols`, `rows`, `profileName`, `timingMode` and `rendererBackend`, plus the optional `missingGlyphs` and `missingGlyphsTruncated` of `RecordedGlyphFields` [webm.ts:WebmExportResult].
 - `generateWebmExport(options, deps?)` returns a `Promise<WebmExportResult>` [webm.ts:generateWebmExport].
+- `WebmReplayTimeoutError` is the error that `generateWebmExport` rejects with when the timed replay passes its deadline. It carries `timeoutMs`, `plannedDurationMs` and `timingMode` [webm.ts:WebmReplayTimeoutError].
 - `renderGridFramesToSvg({ profile, frames, animate, heapSizeLimit? })` returns SVG text from styled grid frames, which `captureGridFrames` in `src/replay/gridFrames.ts` builds. It runs synchronously and leaves the file write to the caller [svg.ts:renderGridFramesToSvg].
 
 ## Invariants
@@ -26,7 +27,8 @@ This directory converts a session's event log into recording exports. `generateA
 - A requested `libghostty-vt` renderer is replaced with `ghostty-web`. A code comment says `libghostty-vt` is semantic-only [webm.ts:generateWebmExport].
 - The default backend factory accepts only `ghostty-web` [webm.ts:createDefaultBackend].
 - Timing presets: `accelerated` caps gaps at 400 ms and holds frames at least 100 ms. `max-speed` holds frames at least 16 ms. Each mode holds the final frame (1000 ms, or 500 ms for `max-speed`) [webm.ts:buildReplayTimingOptions].
-- The timed replay fails after `REPLAY_TIMEOUT_MS` (5 minutes) [webm.ts:REPLAY_TIMEOUT_MS].
+- The timed replay fails with `WebmReplayTimeoutError` after its deadline: the planned duration plus `REPLAY_TIMEOUT_MARGIN_MS` (5 minutes), at most 2^31-1 ms (the longest delay that a timer runs). A long recording is not refused for its length [webm.ts:generateWebmExport, webm.ts:REPLAY_TIMEOUT_MARGIN_MS].
+- The planned duration is the schedule of the replay: the gaps between the events up to the target seq, as the timing mode keeps them (`recorded` keeps each gap, `accelerated` caps each at 400 ms, `max-speed` drops them), plus the hold on the final frame. It asserts that event timestamps do not decrease [webm.ts:plannedReplayDurationMs].
 - `renderGridFramesToSvg` needs the profile font size `SVG_FONT_SIZE` (14) and draws fixed 8.4x18 px cells, so equal input gives byte-identical output [svg.ts:renderGridFramesToSvg]. It always embeds the JetBrains Mono subset, and embeds each other bundled face only when a glyph needs it [svg.ts:embeddedFontAssets]. Output past `defaultMaxSvgOutputLength` of the V8 heap limit (the heap limit divided by 8 bytes, at most `MAX_SVG_OUTPUT_LENGTH`) fails with `EXPORT_ERROR` [svg.ts:defaultMaxSvgOutputLength].
 
 ## Side Effects

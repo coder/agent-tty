@@ -13,6 +13,7 @@ import { generateAsciicast } from '../../export/asciicast.js';
 import { renderGridFramesToSvg } from '../../export/svg.js';
 import {
   generateWebmExport,
+  WebmReplayTimeoutError,
   type WebmExportResult,
 } from '../../export/webm.js';
 import { captureGridFrames } from '../../replay/gridFrames.js';
@@ -591,6 +592,21 @@ export async function runRecordExportCommand(
           out: options.out,
           eventLogBytes: error.size,
           maxEventLogBytes: error.maxSize,
+        },
+        cause: error,
+      });
+    }
+
+    if (error instanceof WebmReplayTimeoutError) {
+      throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+        message: `Failed to export session "${options.sessionId}" as ${format}: the replay timed out after ${String(error.timeoutMs / 1000)} s. The recording plans ${String(error.plannedDurationMs / 1000)} s at ${error.timingMode} timing.`,
+        details: {
+          sessionId: options.sessionId,
+          format,
+          out: options.out,
+          replayTimeoutMs: error.timeoutMs,
+          plannedDurationMs: error.plannedDurationMs,
+          timingMode: error.timingMode,
         },
         cause: error,
       });

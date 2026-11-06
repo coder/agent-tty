@@ -25,7 +25,13 @@ import { resolveProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
 import { invariant, unreachable } from '../util/assert.js';
 
-const REPLAY_TIMEOUT_MS = 5 * 60 * 1000;
+// The replay may run this long past its plan. The margin covers bridge calls,
+// painting, the glyph check and a loaded host. It equals the old fixed limit,
+// so an export that fit before still fits. Boot and finalize run outside the
+// replay deadline.
+const REPLAY_TIMEOUT_MARGIN_MS = 5 * 60 * 1000;
+// Node runs a timer with a longer delay after 1 ms.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // maxGapMs/minFrameHoldMs are tuned for watchability: shorter clamps make the
 // video flicker because every idle gap collapses to a near-instant cut.
 const ACCELERATED_TIMING: ReplayTimingOptions = Object.freeze({
@@ -47,6 +53,42 @@ function buildReplayTimingOptions(mode: ReplayTimingMode): ReplayTimingOptions {
       return { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 500 };
     default:
       unreachable(validatedMode, 'unsupported replay timing mode');
+  }
+}
+
+function computeScheduledGapMs(
+  timing: ReplayTimingOptions,
+  recordedGapMs: number,
+): number {
+  switch (timing.mode) {
+    case 'accelerated':
+      return Math.min(recordedGapMs, timing.maxGapMs);
+    case 'recorded':
+      return recordedGapMs;
+    case 'max-speed':
+      return 0;
+    default:
+      return unreachable(timing, 'unsupported replay timing mode');
+  }
+}
+
+export class WebmReplayTimeoutError extends Error {
+  public readonly timeoutMs: number;
+  public readonly plannedDurationMs: number;
+  public readonly timingMode: ReplayTimingMode;
+
+  public constructor(
+    timeoutMs: number,
+    plannedDurationMs: number,
+    timingMode: ReplayTimingMode,
+  ) {
+    super(
+      `WebM replay timed out after ${String(timeoutMs)} ms (planned duration ${String(plannedDurationMs)} ms at ${timingMode} timing)`,
+    );
+    this.name = 'WebmReplayTimeoutError';
+    this.timeoutMs = timeoutMs;
+    this.plannedDurationMs = plannedDurationMs;
+    this.timingMode = timingMode;
   }
 }
 
@@ -106,11 +148,46 @@ function parseTimestamp(timestamp: string, label: string): number {
   return parsedTimestamp;
 }
 
+// The time that the replay waits on its schedule: the recorded gaps that the
+// timing mode keeps, plus the hold on the final frame. It mirrors the schedule
+// in GhosttyWebBackend.replayWithTiming. Frame holds run inside that schedule,
+// so only the margin covers a replay that falls behind it.
+function plannedReplayDurationMs(
+  replayInput: ReturnType<typeof buildReplayInput>,
+  timing: ReplayTimingOptions,
+): number {
+  let scheduledMs = 0;
+  let previousTimestampMs: number | null = null;
+
+  for (const event of replayInput.events) {
+    if (event.seq > replayInput.targetSeq) {
+      break;
+    }
+
+    const timestampMs = parseTimestamp(
+      event.ts,
+      `replay event ${String(event.seq)} timestamp`,
+    );
+    if (previousTimestampMs !== null) {
+      const recordedGapMs = timestampMs - previousTimestampMs;
+      invariant(
+        recordedGapMs >= 0,
+        'replay event timestamps must be ordered non-decreasingly',
+      );
+      scheduledMs += computeScheduledGapMs(timing, recordedGapMs);
+    }
+    previousTimestampMs = timestampMs;
+  }
+
+  return scheduledMs + timing.finalFrameHoldMs;
+}
+
 async function replayWithTimeout(
   backend: VideoCapableRendererBackend,
   replayInput: ReturnType<typeof buildReplayInput>,
   timingOptions: ReplayTimingOptions,
   timeoutMs: number,
+  plannedDurationMs: number,
 ): Promise<ReplayState> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
@@ -119,7 +196,13 @@ async function replayWithTimeout(
       backend.replayWithTiming(replayInput, timingOptions),
       new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
-          reject(new Error('WebM replay timed out after 5 minutes'));
+          reject(
+            new WebmReplayTimeoutError(
+              timeoutMs,
+              plannedDurationMs,
+              timingOptions.mode,
+            ),
+          );
         }, timeoutMs);
       }),
     ]);
@@ -187,7 +270,18 @@ export async function generateWebmExport(
       requestedRendererName === 'libghostty-vt'
         ? 'ghostty-web'
         : requestedRendererName;
-    const replayTimeoutMs = deps?.replayTimeoutMs ?? REPLAY_TIMEOUT_MS;
+    // A long recording must not time out only because it is long: the
+    // deadline follows the plan, and the margin bounds a hung renderer.
+    const plannedDurationMs = plannedReplayDurationMs(
+      replayInput,
+      timingOptions,
+    );
+    const replayTimeoutMs =
+      deps?.replayTimeoutMs ??
+      Math.min(
+        plannedDurationMs + REPLAY_TIMEOUT_MARGIN_MS,
+        MAX_TIMER_DELAY_MS,
+      );
 
     invariant(
       replayTimeoutMs > 0,
@@ -207,6 +301,7 @@ export async function generateWebmExport(
       replayInput,
       timingOptions,
       replayTimeoutMs,
+      plannedDurationMs,
     );
     const missingGlyphs = await backend.recordedMissingGlyphs();
     await backend.finalizeVideo(options.outputPath);
