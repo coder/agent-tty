@@ -899,7 +899,11 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         .poll(() => frames.length, { timeout: 10_000 })
         .toBeGreaterThan(0);
       await replay(backend, input);
-      // Let every frame that the replay caused reach the listener.
+      // The last colour must reach the listener. Then wait a little more, so
+      // that a frame between two calls would have arrived too.
+      await expect
+        .poll(() => frames.length, { timeout: 10_000 })
+        .toBeGreaterThan(1);
       await new Promise((resolve) => setTimeout(resolve, 500));
       await screencast.send('Page.stopScreencast');
 
