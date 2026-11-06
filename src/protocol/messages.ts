@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import type {
+  EventLogStop as EventLogStopType,
+  EventLogStopReason as EventLogStopReasonType,
   MissingGlyph as MissingGlyphType,
   RecordedMissingGlyph as RecordedMissingGlyphType,
   RecordDiffLine as RecordDiffLineType,
@@ -13,6 +15,7 @@ import type {
 } from './schemas.js';
 
 import {
+  EventLogStopSchema,
   RendererRuntimeSummarySchema,
   ScreenshotParamsSchema,
   ScreenshotResultSchema,
@@ -28,6 +31,8 @@ import {
 import { RendererNameSchema } from '../renderer/names.js';
 
 export {
+  EventLogStopReasonSchema,
+  EventLogStopSchema,
   MissingGlyphSchema,
   RecordedMissingGlyphSchema,
   RecordDiffLineSchema,
@@ -215,13 +220,24 @@ export const InspectResultSchema = z
     // mode (`usedOfflineReplay === true` or the session is not live-host
     // eligible).
     host: HostInfoSchema.optional(),
-    // Populated in both live and offline-replay modes from a `stat()` on the
-    // session's `events.jsonl`. Absent only when the event log file is
-    // missing on disk (e.g. a session that crashed before its first write).
+    // Populated in both live and offline-replay modes: the bytes that one
+    // read of the session's `events.jsonl` returned, the same read that
+    // counts `eventCount` and finds `eventLogStop`. Absent only when the
+    // event log file is missing on disk (e.g. a session that crashed before
+    // its first write).
     eventLogBytes: z.number().int().nonnegative().optional(),
+    // Present only when the stored event log holds the stop marker, so
+    // later events (and so later output) are missing from every snapshot,
+    // wait and export. Read from `events.jsonl` in one pass with
+    // `eventCount`, in live and offline modes.
+    eventLogStop: EventLogStopSchema.optional(),
   })
   .strict();
 export type InspectResult = z.infer<typeof InspectResultSchema>;
+
+export type EventLogStopReason = EventLogStopReasonType;
+
+export type EventLogStop = EventLogStopType;
 
 export type ReplayTimingMode = ReplayTimingModeType;
 

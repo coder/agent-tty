@@ -8,6 +8,7 @@ import type {
 import type { StepDriver } from './stepDriver.js';
 
 import { CliError } from '../cli/errors.js';
+import { eventLogStopTimeoutNote } from '../cli/eventLogStop.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { unreachable } from '../util/assert.js';
 import { unreachedStepRecord } from './result.js';
@@ -285,10 +286,15 @@ async function runWaitStep(
       ...observations,
       error: toBatchStepError(
         makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
-          message:
+          message: [
             result.timedOut && step.timeoutMs !== undefined
               ? `Render wait at step ${String(index)} timed out after ${String(step.timeoutMs)} ms.`
               : `Render wait at step ${String(index)} timed out before its condition was met.`,
+            // The host sends the stop with a timed-out result.
+            ...(result.eventLogStop === undefined
+              ? []
+              : [eventLogStopTimeoutNote(result.eventLogStop)]),
+          ].join(' '),
         }),
       ),
     };

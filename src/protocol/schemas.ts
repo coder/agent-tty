@@ -562,6 +562,23 @@ export const WaitResultSchema = z
   .strict();
 export type WaitResult = z.infer<typeof WaitResultSchema>;
 
+// Why the event log stopped taking records (see `EventLog.queueAppend`):
+// `bytes` when the file reached its size limit, `events` when it reached its
+// entry limit, `unknown` when the stop marker is in the log but its label
+// names no limit (a log that agent-tty did not write).
+export const EventLogStopReasonSchema = z.enum(['bytes', 'events', 'unknown']);
+export type EventLogStopReason = z.infer<typeof EventLogStopReasonSchema>;
+
+// Where the event log stopped: the `seq` of the stop marker that the host
+// writes into `events.jsonl`, and the limit it names.
+export const EventLogStopSchema = z
+  .object({
+    reason: EventLogStopReasonSchema,
+    seq: NonNegativeIntSchema,
+  })
+  .strict();
+export type EventLogStop = z.infer<typeof EventLogStopSchema>;
+
 export const WaitForRenderResultSchema = z
   .object({
     matched: z.boolean(),
@@ -571,6 +588,10 @@ export const WaitForRenderResultSchema = z
     cursorCol: NonNegativeIntSchema.optional(),
     capturedAtSeq: ReplaySeqSchema,
     screenHash: Sha256HexSchema.optional(),
+    // Only on a timed-out wait, and only when the host's event log has
+    // stopped. A wait reads the event log, so output after this seq is not
+    // seen.
+    eventLogStop: EventLogStopSchema.optional(),
   })
   .strict();
 const RecordExportResultFields = {

@@ -7,7 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { EventRecord } from '../../../src/protocol/schemas.js';
 import {
   assertEventLogSize,
+  EVENT_LOG_LIMIT_LABEL_PREFIX,
+  eventLogStopLabel,
   EventLogTooLargeError,
+  findEventLogStop,
+  isEventLogStopMarker,
   MAX_EVENT_LOG_SIZE,
   parseEventLogContent,
   readEventLogRecords,
@@ -254,4 +258,85 @@ describe('event log codec', () => {
       code: 'ENOENT',
     });
   });
+});
+
+describe('the stop marker of an event log', () => {
+  function marker(seq: number, label: string): EventRecord {
+    return {
+      seq,
+      ts: '2026-03-19T12:00:00.000Z',
+      type: 'marker',
+      payload: { label },
+    };
+  }
+
+  it('words the label as the docs quote it, for both limits', () => {
+    expect(EVENT_LOG_LIMIT_LABEL_PREFIX).toBe(
+      'agent-tty: event log limit reached',
+    );
+    expect(eventLogStopLabel('bytes', 52_428_800)).toBe(
+      'agent-tty: event log limit reached (52428800 bytes); later events are not recorded',
+    );
+    expect(eventLogStopLabel('events', 250_000)).toBe(
+      'agent-tty: event log limit reached (250000 events); later events are not recorded',
+    );
+  });
+
+  it.each([
+    ['bytes', 52_428_800],
+    ['events', 250_000],
+  ] as const)(
+    'reads back the %s limit that the label names, with the seq of the marker',
+    (limit, max) => {
+      expect(
+        findEventLogStop([
+          createEvent(),
+          marker(1, eventLogStopLabel(limit, max)),
+        ]),
+      ).toEqual({ reason: limit, seq: 1 });
+    },
+  );
+
+  it('returns undefined when the records hold no stop marker', () => {
+    expect(findEventLogStop([])).toBeUndefined();
+    expect(findEventLogStop(createEvents())).toBeUndefined();
+  });
+
+  it('does not take output or another marker for the stop marker', () => {
+    const lookAlikes: EventRecord[] = [
+      createEvent({
+        payload: { data: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes)` },
+      }),
+      marker(1, 'event log limit reached (8192 bytes)'),
+      marker(2, `note: ${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes)`),
+    ];
+
+    expect(findEventLogStop(lookAlikes)).toBeUndefined();
+    expect(lookAlikes.some(isEventLogStopMarker)).toBe(false);
+  });
+
+  it('returns the first stop marker when the records hold more than one', () => {
+    expect(
+      findEventLogStop([
+        marker(0, eventLogStopLabel('bytes', 8192)),
+        marker(1, eventLogStopLabel('events', 20)),
+      ]),
+    ).toEqual({ reason: 'bytes', seq: 0 });
+  });
+
+  it.each([
+    ['no limit at all', EVENT_LOG_LIMIT_LABEL_PREFIX],
+    ['a word for a limit', `${EVENT_LOG_LIMIT_LABEL_PREFIX} (soon)`],
+    ['an unknown unit', `${EVENT_LOG_LIMIT_LABEL_PREFIX} (12 widgets)`],
+    ['no number', `${EVENT_LOG_LIMIT_LABEL_PREFIX} (bytes)`],
+    ['text glued to the prefix', `${EVENT_LOG_LIMIT_LABEL_PREFIX}ed (1 bytes)`],
+  ])(
+    'reports a stop marker that names %s with the reason unknown, and does not throw',
+    (_case, label) => {
+      expect(findEventLogStop([createEvent(), marker(1, label)])).toEqual({
+        reason: 'unknown',
+        seq: 1,
+      });
+    },
+  );
 });

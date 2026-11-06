@@ -1,7 +1,5 @@
-import { createReadStream } from 'node:fs';
-import { open, readFile, stat } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
 
 import { z } from 'zod';
 
@@ -11,6 +9,7 @@ import {
   InputRunEventPayloadSchema,
   MarkerEventPayloadSchema,
   RunCompleteEventPayloadSchema,
+  type EventLogStop,
   type EventRecord,
   type InputMouseEventPayload,
   type InputRunEventPayload,
@@ -19,12 +18,15 @@ import {
 } from '../protocol/schemas.js';
 import {
   assertEventLogSize,
+  EVENT_LOG_LIMIT_LABEL_PREFIX,
+  eventLogStopLabel,
+  findEventLogStop,
   MAX_EVENT_LOG_SIZE,
   parseEventLogContent,
+  type EventLogLimit,
 } from '../storage/eventLogCodec.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
-import { hasErrorCode } from '../util/hasErrorCode.js';
 
 const OutputEventPayloadSchema = z
   .object({
@@ -134,14 +136,6 @@ export const EVENT_LOG_TAIL_RESERVE_BYTES = 4096;
  */
 export const EVENT_LOG_TAIL_RESERVE_ENTRIES = 2;
 
-/**
- * Start of the label of the marker that records why the log stopped. The rest
- * of the label names the limit that was reached: `(<n> bytes)` for the file
- * size, `(<n> events)` for the entry count.
- */
-export const EVENT_LOG_LIMIT_LABEL_PREFIX =
-  'agent-tty: event log limit reached';
-
 export interface EventLogOptions {
   /**
    * Size limit of the file in bytes. Defaults to `MAX_EVENT_LOG_SIZE`, which
@@ -154,9 +148,6 @@ export interface EventLogOptions {
    */
   readonly maxEntries?: number;
 }
-
-/** The limit that stopped the log. */
-type StopReason = 'bytes' | 'entries';
 
 interface PreparedRecord {
   readonly record: EventRecord;
@@ -241,62 +232,6 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   invariant(lastRecord.seq >= 0, 'event log seq must be non-negative');
 
   return lastRecord.seq + 1;
-}
-
-/** True for the marker that `recordStop` writes when the log stops. */
-function isStopMarker(record: EventRecord): boolean {
-  return (
-    record.type === 'marker' &&
-    record.payload.label.startsWith(EVENT_LOG_LIMIT_LABEL_PREFIX)
-  );
-}
-
-/**
- * Returns the event log file size in bytes, or `undefined` when the file
- * does not exist (ENOENT). Non-ENOENT errors propagate to the caller.
- */
-export async function statEventLogBytes(
-  filePath: string,
-): Promise<number | undefined> {
-  assertFilePath(filePath);
-
-  try {
-    const stats = await stat(filePath);
-    return stats.size;
-  } catch (error: unknown) {
-    if (hasErrorCode(error, 'ENOENT')) {
-      return undefined;
-    }
-
-    throw error;
-  }
-}
-
-export async function countEventLogEntries(filePath: string): Promise<number> {
-  assertFilePath(filePath);
-
-  let count = 0;
-
-  try {
-    const lineReader = createInterface({
-      input: createReadStream(filePath, { encoding: 'utf8' }),
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of lineReader) {
-      if (line.trim().length > 0) {
-        count += 1;
-      }
-    }
-  } catch (error: unknown) {
-    if (hasErrorCode(error, 'ENOENT')) {
-      return 0;
-    }
-
-    throw error;
-  }
-
-  return count;
 }
 
 export class EventLog {
@@ -403,7 +338,7 @@ export class EventLog {
         maxBytes,
         maxEntries,
         eventBuffer,
-        eventBuffer.some(isStopMarker),
+        findEventLogStop(eventBuffer) !== undefined,
       );
     } catch (error) {
       await fileHandle.close();
@@ -445,7 +380,7 @@ export class EventLog {
     payload: EventLogPayload,
   ): Promise<number> {
     // Only `recordStop` writes the stop marker, so a reopened log can trust a
-    // marker with this prefix (see `isStopMarker`).
+    // marker with this prefix (see `findEventLogStop`).
     if (
       type === 'marker' &&
       (payload as MarkerEventPayload).label.startsWith(
@@ -540,7 +475,7 @@ export class EventLog {
   private findStopReason(
     type: EventLogEventType,
     bytes: number,
-  ): StopReason | undefined {
+  ): EventLogLimit | undefined {
     const reserveBytes = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_BYTES;
     const reserveEntries = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_ENTRIES;
 
@@ -548,7 +483,7 @@ export class EventLog {
       return 'bytes';
     }
     if (this.eventBuffer.length + 1 > this.maxEntries - reserveEntries) {
-      return 'entries';
+      return 'events';
     }
     return undefined;
   }
@@ -560,15 +495,14 @@ export class EventLog {
    * reached: bytes or events. It goes into the reserves, so it fits unless a
    * log that this host did not write already filled them before it opened.
    */
-  private recordStop(reason: StopReason): void {
+  private recordStop(reason: EventLogLimit): void {
     this.stopped = true;
 
-    const limit =
-      reason === 'bytes'
-        ? `${String(this.maxBytes)} bytes`
-        : `${String(this.maxEntries)} events`;
     const stop = this.prepareRecord('marker', {
-      label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${limit}); later events are not recorded`,
+      label: eventLogStopLabel(
+        reason,
+        reason === 'bytes' ? this.maxBytes : this.maxEntries,
+      ),
     });
     if (
       stop.bytes > this.maxBytes - this.fileBytes ||
@@ -656,6 +590,17 @@ export class EventLog {
 
   getEvents(): readonly EventRecord[] {
     return this.eventBuffer;
+  }
+
+  /**
+   * Where this log stopped, from the records that `getEvents` returns: the
+   * stop marker is there as soon as `recordStop` takes its `seq`, before its
+   * write settles. So a caller that reads the stop here sees every stop that
+   * its own reads of the buffer can see. The file on disk can still lack the
+   * marker at that moment.
+   */
+  getStop(): EventLogStop | undefined {
+    return findEventLogStop(this.eventBuffer);
   }
 
   getEventsSince(afterSeq: number): EventRecord[] {
