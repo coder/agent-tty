@@ -668,6 +668,22 @@ describe('generateWebmExport stall watchdog', () => {
     expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps going through several waits that together pass the longest timer', async () => {
+    const { outcome, mockBackend } = await startExport(async (onProgress) => {
+      for (let seq = 0; seq < 3; seq += 1) {
+        onProgress({ seq, scheduledWaitMs: 10 * DAY_MS });
+        await sleep(10 * DAY_MS);
+      }
+      return createReplayState();
+    });
+
+    await vi.advanceTimersByTimeAsync(30 * DAY_MS);
+    const { error } = await outcome;
+
+    expect(error).toBeUndefined();
+    expect(mockBackend.finalizeVideo).toHaveBeenCalledTimes(1);
+  });
+
   it('starts no timer that runs longer than a timer can, for a wait of 30 days', async () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     const { outcome, mockBackend } = await startExport(async (onProgress) => {
