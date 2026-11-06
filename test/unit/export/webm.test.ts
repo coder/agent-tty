@@ -593,7 +593,6 @@ describe('generateWebmExport stall watchdog', () => {
       },
     );
     const mockBackend = createMockBackend({ replayWithTiming });
-    let settled = false;
     const outcome = generateWebmExport(
       {
         sessionId: 'session-01',
@@ -605,18 +604,12 @@ describe('generateWebmExport stall watchdog', () => {
       },
       { backendFactory: () => mockBackend.backend },
     ).then(
-      (result) => {
-        settled = true;
-        return { result, error: undefined };
-      },
-      (error: unknown) => {
-        settled = true;
-        return { result: undefined, error };
-      },
+      (result) => ({ result, error: undefined }),
+      (error: unknown) => ({ result: undefined, error }),
     );
     await replayStarted;
 
-    return { outcome, mockBackend, isSettled: () => settled };
+    return { outcome, mockBackend };
   }
 
   beforeEach(() => {
@@ -698,17 +691,14 @@ describe('generateWebmExport stall watchdog', () => {
   it.each(['recorded', 'accelerated', 'max-speed'] as const)(
     'stops a hung %s replay once the window has passed since its last progress',
     async (timingMode) => {
-      const { outcome, mockBackend, isSettled } = await startExport(
-        async (onProgress) => {
-          await sleep(1_000);
-          onProgress({ seq: 7, scheduledWaitMs: 0 });
-          return new Promise(() => undefined);
-        },
-        timingMode,
-      );
+      const { outcome, mockBackend } = await startExport(async (onProgress) => {
+        await sleep(1_000);
+        onProgress({ seq: 7, scheduledWaitMs: 0 });
+        return new Promise(() => undefined);
+      }, timingMode);
 
       await vi.advanceTimersByTimeAsync(1_000 + WINDOW_MS - 1);
-      expect(isSettled()).toBe(false);
+      expect(mockBackend.dispose).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
       const { error } = await outcome;
@@ -726,12 +716,12 @@ describe('generateWebmExport stall watchdog', () => {
   );
 
   it('stops a replay that reports nothing, naming no event', async () => {
-    const { outcome, isSettled } = await startExport(
+    const { outcome, mockBackend } = await startExport(
       () => new Promise(() => undefined),
     );
 
     await vi.advanceTimersByTimeAsync(WINDOW_MS - 1);
-    expect(isSettled()).toBe(false);
+    expect(mockBackend.dispose).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
     const { error } = await outcome;
@@ -741,13 +731,13 @@ describe('generateWebmExport stall watchdog', () => {
   });
 
   it('starts the window after a scheduled wait, not before it', async () => {
-    const { outcome, isSettled } = await startExport((onProgress) => {
+    const { outcome, mockBackend } = await startExport((onProgress) => {
       onProgress({ seq: 3, scheduledWaitMs: 2 * DAY_MS });
       return new Promise(() => undefined);
     });
 
     await vi.advanceTimersByTimeAsync(2 * DAY_MS + WINDOW_MS - 1);
-    expect(isSettled()).toBe(false);
+    expect(mockBackend.dispose).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
     const { error } = await outcome;
