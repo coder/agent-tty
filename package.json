@@ -39,7 +39,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ./scripts/copy-renderer-assets.mjs",
-    "clean": "rimraf coverage dist *.tsbuildinfo",
+    "clean": "rimraf coverage dist .tsconfig.tsbuildinfo .tsconfig.build.tsbuildinfo",
     "cli": "tsx src/cli/main.ts",
     "doctor": "tsx src/cli/main.ts doctor",
     "format": "oxfmt . --write",
