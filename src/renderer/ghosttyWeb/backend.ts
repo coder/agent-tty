@@ -81,6 +81,10 @@ interface GhosttyServedAsset extends GhosttyRequestAsset {
 interface GhosttyBrowserBridge {
   isReady?: () => boolean;
   write?: (data: string) => Promise<void> | void;
+  writeBatch?: (
+    chunks: string[],
+    waitForFrame?: boolean,
+  ) => Promise<void> | void;
   resize?: (cols: number, rows: number) => Promise<void> | void;
   setCursorVisible?: (visible: boolean) => Promise<void> | void;
   getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
@@ -1692,7 +1696,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         batch.length <= MAX_REPLAY_BATCH_SIZE,
         'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
       );
-      await this.writeBatchBridge(page, batch);
+      // The page waits for a frame only after the last batch of the flush.
+      await this.writeBatchBridge(
+        page,
+        batch,
+        batchStart + MAX_REPLAY_BATCH_SIZE >= dataChunks.length,
+      );
       await afterEachBatch?.();
     }
   }
@@ -1777,6 +1786,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async writeBatchBridge(
     page: Page,
     dataChunks: string[],
+    waitForFrame = true,
   ): Promise<void> {
     invariant(
       dataChunks.length > 0,
@@ -1790,16 +1800,17 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       assertString(chunk, 'bridge batch write chunk must be a string');
     }
 
-    await page.evaluate(async (chunks: string[]) => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
-      if (bridge === undefined || typeof bridge.write !== 'function') {
-        throw new Error('ghostty-web bridge write() is unavailable');
-      }
+    await page.evaluate(
+      async ([chunks, shouldWaitForFrame]: readonly [string[], boolean]) => {
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
+        if (bridge === undefined || typeof bridge.writeBatch !== 'function') {
+          throw new Error('ghostty-web bridge writeBatch() is unavailable');
+        }
 
-      for (const chunk of chunks) {
-        await bridge.write(chunk);
-      }
-    }, dataChunks);
+        await bridge.writeBatch(chunks, shouldWaitForFrame);
+      },
+      [dataChunks, waitForFrame] as const,
+    );
   }
 
   private async writeBridge(page: Page, data: string): Promise<void> {

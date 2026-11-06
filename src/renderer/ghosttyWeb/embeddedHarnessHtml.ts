@@ -651,6 +651,39 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
           });
           updateDocumentState();
         },
+        async writeBatch(chunks, waitForFrame = true) {
+          const terminal = getReadyTerminal();
+          invariant(
+            Array.isArray(chunks) && chunks.length > 0,
+            'writeBatch() chunks must be a non-empty array',
+          );
+          invariant(
+            typeof waitForFrame === 'boolean',
+            'writeBatch() waitForFrame must be a boolean',
+          );
+          for (const chunk of chunks) {
+            assertStringValue(chunk, 'writeBatch() chunks must be strings');
+          }
+
+          // The wasm write is synchronous, but ghostty-web calls a write
+          // callback one animation frame later. Waiting on every chunk made a
+          // replay cost one frame per event. The callback on the last chunk
+          // keeps the contract of write(): the call resolves after a frame.
+          // A caller that writes a run of batches asks for that frame only
+          // after the last one.
+          const lastIndex = chunks.length - 1;
+          for (let index = 0; index < lastIndex; index += 1) {
+            terminal.write(chunks[index]);
+          }
+          if (waitForFrame) {
+            await new Promise((resolve) => {
+              terminal.write(chunks[lastIndex], resolve);
+            });
+          } else {
+            terminal.write(chunks[lastIndex]);
+          }
+          updateDocumentState();
+        },
         getSnapshot(options) {
           return getSnapshotPayload(options);
         },

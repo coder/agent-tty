@@ -426,6 +426,140 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(evaluate).not.toHaveBeenCalled();
   });
 
+  // The page waits one animation frame (about 17 ms) after each bridge write.
+  // A bridge call that writes its chunks one by one makes a replay cost one
+  // frame per output event, so these tests run the page function of every
+  // call against a counting bridge.
+  async function withCountingBridge<T>(
+    run: (context: {
+      page: { isClosed: () => boolean; evaluate: ReturnType<typeof vi.fn> };
+      write: ReturnType<typeof vi.fn>;
+      writeBatchSizes: number[];
+      frameWaits: boolean[];
+      writtenChunks: string[];
+    }) => Promise<T>,
+  ): Promise<T> {
+    const writeBatchSizes: number[] = [];
+    const frameWaits: boolean[] = [];
+    const writtenChunks: string[] = [];
+    const write = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('__agentTty', {
+      write,
+      writeBatch: (chunks: string[], waitForFrame: boolean) => {
+        writeBatchSizes.push(chunks.length);
+        frameWaits.push(waitForFrame);
+        writtenChunks.push(...chunks);
+        return Promise.resolve();
+      },
+    });
+    const page = {
+      isClosed: () => false,
+      evaluate: vi.fn((pageFunction: (arg: unknown) => unknown, arg: unknown) =>
+        Promise.resolve(pageFunction(arg)),
+      ),
+    };
+
+    try {
+      return await run({
+        page,
+        write,
+        writeBatchSizes,
+        frameWaits,
+        writtenChunks,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  function outputReplayInput(eventCount: number): ReplayInput {
+    return {
+      sessionId: 'renderer-unit-session',
+      initialCols: 80,
+      initialRows: 24,
+      targetSeq: eventCount - 1,
+      events: Array.from({ length: eventCount }, (_, seq) => ({
+        seq,
+        ts: '2026-03-19T12:00:00.000Z',
+        type: 'output' as const,
+        payload: { data: `chunk-${String(seq)}` },
+      })),
+    };
+  }
+
+  it('writes a bridge batch into the page in one call that waits for a frame', async () => {
+    const backend = createBackend();
+    const chunks = Array.from({ length: 1000 }, (_, i) => `chunk-${String(i)}`);
+
+    await withCountingBridge(
+      async ({ page, write, writeBatchSizes, frameWaits, writtenChunks }) => {
+        await (
+          backend as unknown as {
+            writeBatchBridge: (
+              page: object,
+              dataChunks: string[],
+            ) => Promise<void>;
+          }
+        ).writeBatchBridge(page, chunks);
+
+        expect(page.evaluate).toHaveBeenCalledTimes(1);
+        expect(writeBatchSizes).toEqual([1000]);
+        expect(frameWaits).toEqual([true]);
+        expect(writtenChunks).toEqual(chunks);
+        expect(write).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it.each([
+    [
+      'replayTo',
+      (backend: GhosttyWebBackend, input: ReplayInput) =>
+        backend.replayTo(input),
+    ],
+    [
+      'replayWithTiming',
+      (backend: GhosttyWebBackend, input: ReplayInput) =>
+        backend.replayWithTiming(input, {
+          mode: 'max-speed',
+          minFrameHoldMs: 0,
+          finalFrameHoldMs: 0,
+        }),
+    ],
+  ])(
+    '%s calls the page once per 1000 output events, and waits for a frame after the last call',
+    async (_name, replay) => {
+      const backend = createBackend();
+      const input = outputReplayInput(2_501);
+
+      await withCountingBridge(
+        async ({ page, write, writeBatchSizes, frameWaits, writtenChunks }) => {
+          Object.assign(backend as object, {
+            isBooted: true,
+            page,
+            resizeBridge: () => Promise.resolve(),
+            notePaintedGraphemes: () => Promise.resolve(),
+            checkPaintedGlyphs: () => Promise.resolve({}),
+            readHarnessSnapshot: () =>
+              Promise.resolve(createHarnessSnapshotPayload({ cols: 80 })),
+          });
+
+          await replay(backend, input);
+
+          expect(page.evaluate).toHaveBeenCalledTimes(3);
+          expect(writeBatchSizes).toEqual([1000, 1000, 501]);
+          expect(frameWaits).toEqual([false, false, true]);
+          expect(writtenChunks).toEqual(
+            input.events.map((event) =>
+              event.type === 'output' ? event.payload.data : '',
+            ),
+          );
+          expect(write).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
+
   it('includes structured cell data only when snapshot includeCells is requested', async () => {
     const backend = createBackend();
     const evaluate = vi.fn().mockResolvedValue(

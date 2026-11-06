@@ -755,6 +755,79 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     }
   });
 
+  // ghostty-web calls a write callback one animation frame (about 17 ms)
+  // after the write. A bridge call that waits on every chunk made a replay cost
+  // one frame per output event: 90 minutes for 250 000 events.
+  it.each([
+    [
+      'replayTo',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayTo(input),
+    ],
+    [
+      'replayWithTiming',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayWithTiming(input, {
+          mode: 'max-speed',
+          minFrameHoldMs: 0,
+          finalFrameHoldMs: 0,
+        }),
+    ],
+  ])(
+    '%s waits for one animation frame per flush of output events, not per event',
+    async (_name, replay) => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      // ghostty-web calls a write callback one frame after the write, so the
+      // number of writes that pass a callback is the number of frames that a
+      // replay waits for. The string keeps vitest from rewriting the import.
+      await page.evaluate(`(async () => {
+        const { Terminal } = await import('/assets/ghostty-web.js');
+        const write = Terminal.prototype.write;
+        globalThis.__writeFrameWaits = 0;
+        Terminal.prototype.write = function (data, callback) {
+          if (callback !== undefined) {
+            globalThis.__writeFrameWaits += 1;
+          }
+          return write.call(this, data, callback);
+        };
+      })()`);
+
+      // One character per event, so a chunk that is lost or moved changes
+      // the text on the screen. 2501 characters fill 32 rows of 80 columns.
+      const characters = Array.from({ length: 2_501 }, (_, seq) =>
+        'abcdefghijklmnopqrstuvwxyz0123456789'.charAt((seq * 7) % 36),
+      );
+      const input = createReplayInput(
+        characters.map((character, seq) => ({
+          seq,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: character },
+        })),
+        { initialRows: 40 },
+      );
+      await replay(backend, input);
+
+      // A bridge call holds at most 1000 chunks, so 2501 events take 3 calls.
+      // Only the last call waits for a frame.
+      expect(
+        await page.evaluate(
+          () =>
+            (globalThis as unknown as { __writeFrameWaits: number })
+              .__writeFrameWaits,
+        ),
+      ).toBe(1);
+      const expectedRows = Array.from({ length: 32 }, (_, row) =>
+        characters.slice(row * 80, (row + 1) * 80).join(''),
+      );
+      const screenRows = (await backend.snapshot()).visibleLines.map(
+        (line) => line.text,
+      );
+      expect(screenRows.slice(0, 32)).toEqual(expectedRows);
+    },
+  );
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 
