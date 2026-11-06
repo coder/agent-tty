@@ -81,10 +81,7 @@ interface GhosttyServedAsset extends GhosttyRequestAsset {
 interface GhosttyBrowserBridge {
   isReady?: () => boolean;
   write?: (data: string) => Promise<void> | void;
-  writeBatch?: (
-    chunks: string[],
-    waitForFrame?: boolean,
-  ) => Promise<void> | void;
+  writeBatch?: (chunks: string[], endsFlush?: boolean) => Promise<void> | void;
   resize?: (cols: number, rows: number) => Promise<void> | void;
   setCursorVisible?: (visible: boolean) => Promise<void> | void;
   getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
@@ -663,7 +660,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let scheduleStartedAtMs = 0;
     let scheduledElapsedMs = 0;
 
-    const flushOutputBatch = async (): Promise<void> => {
+    const flushOutputBatch = async (holdFrame = true): Promise<void> => {
       if (pendingOutputChunks.length === 0) {
         return;
       }
@@ -673,7 +670,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       );
       pendingOutputChunks = [];
       pendingSinceTimestampMs = null;
-      await waitForDelay(resolvedMinFrameHoldMs);
+      if (holdFrame) {
+        await waitForDelay(resolvedMinFrameHoldMs);
+      }
     };
 
     for (const event of input.events) {
@@ -710,16 +709,20 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         // Output shows once its batch is a frame hold old, unless the replay
         // runs behind the schedule: then batches grow until it catches up, so
         // slow flushes lower the frame rate instead of stretching the video.
-        // Max-speed keeps one batch per run of output events, so its frame
-        // holds cannot outlast the export timeout.
+        // Max-speed has no schedule to fall behind. It flushes every frame
+        // hold of recorded time, so each moment that a viewer could tell apart
+        // gets a frame, and a flush costs at most one frame per output event.
+        // The frame wait of such a flush is already the frame of its moment,
+        // so max-speed holds only after the last flush of a run of output: a
+        // hold after every flush would export 30 ms steps slower than they ran.
         if (
-          timing.mode !== 'max-speed' &&
           pendingSinceTimestampMs !== null &&
           eventTimestampMs - pendingSinceTimestampMs >=
             resolvedMinFrameHoldMs &&
-          performance.now() - scheduleStartedAtMs <= scheduledElapsedMs
+          (timing.mode === 'max-speed' ||
+            performance.now() - scheduleStartedAtMs <= scheduledElapsedMs)
         ) {
-          await flushOutputBatch();
+          await flushOutputBatch(timing.mode !== 'max-speed');
         }
         // Waiting for the event's place on the schedule lets frame holds and
         // bridge calls use up time that the recording spent idle.
@@ -1696,7 +1699,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         batch.length <= MAX_REPLAY_BATCH_SIZE,
         'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
       );
-      // The page waits for a frame only after the last batch of the flush.
+      // The page holds the batches of a flush until the last one. Then it
+      // writes them all and waits for one frame.
       await this.writeBatchBridge(
         page,
         batch,
@@ -1786,7 +1790,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async writeBatchBridge(
     page: Page,
     dataChunks: string[],
-    waitForFrame = true,
+    endsFlush = true,
   ): Promise<void> {
     invariant(
       dataChunks.length > 0,
@@ -1801,15 +1805,15 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     }
 
     await page.evaluate(
-      async ([chunks, shouldWaitForFrame]: readonly [string[], boolean]) => {
+      async ([chunks, batchEndsFlush]: readonly [string[], boolean]) => {
         const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         if (bridge === undefined || typeof bridge.writeBatch !== 'function') {
           throw new Error('ghostty-web bridge writeBatch() is unavailable');
         }
 
-        await bridge.writeBatch(chunks, shouldWaitForFrame);
+        await bridge.writeBatch(chunks, batchEndsFlush);
       },
-      [dataChunks, waitForFrame] as const,
+      [dataChunks, endsFlush] as const,
     );
   }
 

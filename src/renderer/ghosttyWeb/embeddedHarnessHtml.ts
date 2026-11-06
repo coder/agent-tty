@@ -262,6 +262,8 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
 
       const state = {
         errorMessage: null,
+        // Chunks of a flush that writeBatch() holds until the call that ends it.
+        heldChunks: [],
         ready: false,
         terminal: null,
       };
@@ -645,43 +647,54 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         async write(data) {
           const terminal = getReadyTerminal();
           assertStringValue(data, 'write() data must be a string');
+          invariant(
+            state.heldChunks.length === 0,
+            'write() cannot run while writeBatch() holds the chunks of a flush',
+          );
 
           await new Promise((resolve) => {
             terminal.write(data, resolve);
           });
           updateDocumentState();
         },
-        async writeBatch(chunks, waitForFrame = true) {
+        async writeBatch(chunks, endsFlush = true) {
           const terminal = getReadyTerminal();
           invariant(
             Array.isArray(chunks) && chunks.length > 0,
             'writeBatch() chunks must be a non-empty array',
           );
           invariant(
-            typeof waitForFrame === 'boolean',
-            'writeBatch() waitForFrame must be a boolean',
+            typeof endsFlush === 'boolean',
+            'writeBatch() endsFlush must be a boolean',
           );
           for (const chunk of chunks) {
             assertStringValue(chunk, 'writeBatch() chunks must be strings');
           }
 
-          // The wasm write is synchronous, but ghostty-web calls a write
-          // callback one animation frame later. Waiting on every chunk made a
-          // replay cost one frame per event. The callback on the last chunk
-          // keeps the contract of write(): the call resolves after a frame.
-          // A caller that writes a run of batches asks for that frame only
-          // after the last one.
-          const lastIndex = chunks.length - 1;
+          // A flush shows as one frame. A flush that needs several calls holds
+          // its chunks here until the call that ends it, so no frame paints
+          // the screen between two calls: ghostty-web renders on every animation
+          // frame, and a video records every paint. The call that ends the
+          // flush writes all chunks in one task. The wasm write is synchronous,
+          // but ghostty-web calls a write callback one animation frame later,
+          // so waiting on every chunk made a replay cost one frame per event.
+          // The callback on the last chunk makes the call resolve after a frame.
+          for (const chunk of chunks) {
+            state.heldChunks.push(chunk);
+          }
+          if (!endsFlush) {
+            return;
+          }
+
+          const flush = state.heldChunks;
+          state.heldChunks = [];
+          const lastIndex = flush.length - 1;
           for (let index = 0; index < lastIndex; index += 1) {
-            terminal.write(chunks[index]);
+            terminal.write(flush[index]);
           }
-          if (waitForFrame) {
-            await new Promise((resolve) => {
-              terminal.write(chunks[lastIndex], resolve);
-            });
-          } else {
-            terminal.write(chunks[lastIndex]);
-          }
+          await new Promise((resolve) => {
+            terminal.write(flush[lastIndex], resolve);
+          });
           updateDocumentState();
         },
         getSnapshot(options) {
@@ -700,6 +713,10 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         },
         resize(cols, rows) {
           const terminal = getReadyTerminal();
+          invariant(
+            state.heldChunks.length === 0,
+            'resize() cannot run while writeBatch() holds the chunks of a flush',
+          );
           assertPositiveInteger(
             cols,
             'resize() cols must be a positive integer',

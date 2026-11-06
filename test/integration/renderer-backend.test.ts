@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -769,7 +770,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       (renderer: GhosttyWebBackend, input: ReplayInput) =>
         renderer.replayWithTiming(input, {
           mode: 'max-speed',
-          minFrameHoldMs: 0,
+          minFrameHoldMs: 16,
           finalFrameHoldMs: 0,
         }),
     ],
@@ -827,6 +828,112 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(screenRows.slice(0, 32)).toEqual(expectedRows);
     },
   );
+
+  // ghostty-web paints on every animation frame, and a WebM records every
+  // paint. A flush of more than 1000 chunks takes several page calls, so a
+  // state that exists between two calls can reach the video.
+  it.each([
+    [
+      'replayTo',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayTo(input),
+    ],
+    [
+      'replayWithTiming',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayWithTiming(input, {
+          mode: 'max-speed',
+          minFrameHoldMs: 16,
+          finalFrameHoldMs: 200,
+        }),
+    ],
+  ])(
+    '%s paints a flush of several page calls as one frame',
+    async (_name, replay) => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      // The screencast is the source of the frames that Playwright encodes into
+      // a video: it sends a frame for every paint.
+      const screencast = await page.context().newCDPSession(page);
+      const frames: string[] = [];
+      screencast.on('Page.screencastFrame', (frame) => {
+        const hash = createHash('sha256').update(frame.data).digest('hex');
+        if (frames.at(-1) !== hash) {
+          frames.push(hash);
+        }
+        void screencast
+          .send('Page.screencastFrameAck', { sessionId: frame.sessionId })
+          .catch(() => {});
+      });
+      await screencast.send('Page.startScreencast', {
+        format: 'png',
+        everyNthFrame: 1,
+      });
+
+      // Each bridge call of 1000 chunks fills the screen with its own colour
+      // (red, green, blue), so a paint between two calls shows a colour that is
+      // not the last. A pause after each call stands for a slow host.
+      const backgroundFor = (seq: number): number =>
+        [41, 42, 44][Math.floor(seq / 1_000)] ?? 44;
+      const input = createReplayInput(
+        Array.from({ length: 2_501 }, (_, seq) => ({
+          seq,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: `\u001b[${String(backgroundFor(seq))}m\u001b[2J` },
+        })),
+      );
+      const writeBatchBridge = (
+        backend as unknown as {
+          writeBatchBridge: (...args: unknown[]) => Promise<void>;
+        }
+      ).writeBatchBridge.bind(backend);
+      Object.assign(backend as object, {
+        writeBatchBridge: async (...args: unknown[]) => {
+          await writeBatchBridge(...args);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        },
+      });
+      // Wait for the first frame, so that it is the screen before the replay.
+      await expect
+        .poll(() => frames.length, { timeout: 10_000 })
+        .toBeGreaterThan(0);
+      await replay(backend, input);
+      // Let every frame that the replay caused reach the listener.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await screencast.send('Page.stopScreencast');
+
+      // The frame before the replay, then the frame of the last colour.
+      expect(frames).toHaveLength(2);
+    },
+  );
+
+  it('holds the chunks of a flush until the call that ends it', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    const visibleFirstRow = (): Promise<string> =>
+      page.evaluate(
+        `window.__agentTty.getVisibleText().split('\\n')[0]`,
+      ) as Promise<string>;
+    await page.evaluate('window.__agentTty.resize(80, 24)');
+
+    await page.evaluate(`window.__agentTty.writeBatch(['ab'], false)`);
+    await page.evaluate(`window.__agentTty.writeBatch(['cd'], false)`);
+    expect(await visibleFirstRow()).toBe('');
+
+    // A direct write or a resize would move the held chunks behind its own
+    // output, so the page refuses both.
+    await expect(page.evaluate(`window.__agentTty.write('x')`)).rejects.toThrow(
+      'holds the chunks of a flush',
+    );
+    await expect(
+      page.evaluate(`window.__agentTty.resize(100, 30)`),
+    ).rejects.toThrow('holds the chunks of a flush');
+    expect(await visibleFirstRow()).toBe('');
+
+    await page.evaluate(`window.__agentTty.writeBatch(['ef'], true)`);
+    expect(await visibleFirstRow()).toBe('abcdef');
+  });
 
   it('allows dispose to be called more than once', async () => {
     await backend.boot();

@@ -487,7 +487,7 @@ describe('GhosttyWebBackend unit guards', () => {
     };
   }
 
-  it('writes a bridge batch into the page in one call that waits for a frame', async () => {
+  it('writes a bridge batch into the page in one call that ends its flush', async () => {
     const backend = createBackend();
     const chunks = Array.from({ length: 1000 }, (_, i) => `chunk-${String(i)}`);
 
@@ -522,12 +522,12 @@ describe('GhosttyWebBackend unit guards', () => {
       (backend: GhosttyWebBackend, input: ReplayInput) =>
         backend.replayWithTiming(input, {
           mode: 'max-speed',
-          minFrameHoldMs: 0,
+          minFrameHoldMs: 16,
           finalFrameHoldMs: 0,
         }),
     ],
   ])(
-    '%s calls the page once per 1000 output events, and waits for a frame after the last call',
+    '%s calls the page once per 1000 output events, and ends the flush with the last call',
     async (_name, replay) => {
       const backend = createBackend();
       const input = outputReplayInput(2_501);
@@ -559,6 +559,70 @@ describe('GhosttyWebBackend unit guards', () => {
       );
     },
   );
+
+  // A bridge call holds at most 1000 chunks. The page writes a flush when the
+  // call that ends it arrives, so the flag must be true on exactly one call of
+  // a flush, the last: also when the chunk count is a multiple of 1000.
+  it.each([
+    [1, [true]],
+    [999, [true]],
+    [1_000, [true]],
+    [1_001, [false, true]],
+    [1_999, [false, true]],
+    [2_000, [false, true]],
+    [2_001, [false, false, true]],
+  ])(
+    'ends a flush of %i output chunks with its last bridge call only',
+    async (chunkCount, expectedEnds) => {
+      const backend = createBackend();
+
+      await withCountingBridge(
+        async ({ page, writeBatchSizes, frameWaits }) => {
+          Object.assign(backend as object, {
+            isBooted: true,
+            page,
+            resizeBridge: () => Promise.resolve(),
+            readHarnessSnapshot: () =>
+              Promise.resolve(createHarnessSnapshotPayload({ cols: 80 })),
+          });
+
+          await backend.replayTo(outputReplayInput(chunkCount));
+
+          expect(frameWaits).toEqual(expectedEnds);
+          expect(writeBatchSizes.reduce((sum, size) => sum + size, 0)).toBe(
+            chunkCount,
+          );
+        },
+      );
+    },
+  );
+
+  it('ends the flush before a marker, so the next flush starts holding again', async () => {
+    const backend = createBackend();
+    const input = outputReplayInput(3_001);
+    input.events[1_500] = {
+      seq: 1_500,
+      ts: '2026-03-19T12:00:00.000Z',
+      type: 'marker',
+      payload: { label: 'boundary' },
+    };
+
+    await withCountingBridge(async ({ page, writeBatchSizes, frameWaits }) => {
+      Object.assign(backend as object, {
+        isBooted: true,
+        page,
+        resizeBridge: () => Promise.resolve(),
+        readHarnessSnapshot: () =>
+          Promise.resolve(createHarnessSnapshotPayload({ cols: 80 })),
+      });
+
+      await backend.replayTo(input);
+
+      // 1500 chunks, the marker, then 1500 chunks.
+      expect(writeBatchSizes).toEqual([1_000, 500, 1_000, 500]);
+      expect(frameWaits).toEqual([false, true, false, true]);
+    });
+  });
 
   it('includes structured cell data only when snapshot includeCells is requested', async () => {
     const backend = createBackend();
@@ -1400,15 +1464,109 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ]);
   });
 
-  it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
+  it('flushes max-speed output every frame hold of recorded time, so each moment gets a frame', async () => {
     const flushes = await replayAndRecordFlushes(
-      [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 400)],
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 5),
+        outputEvent(2, 10),
+        outputEvent(3, 16),
+        outputEvent(4, 20),
+        outputEvent(5, 40),
+        outputEvent(6, 41),
+        exitEvent(7, 500),
+      ],
       MAX_SPEED,
     );
 
-    expect(flushes).toEqual([
-      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0', 'out1', 'out2'] },
+    expect(flushes.map((flush) => flush.chunks)).toEqual([
+      ['out0', 'out1', 'out2'],
+      ['out3', 'out4'],
+      ['out5', 'out6'],
     ]);
+  });
+
+  it('keeps one max-speed flush per moment when the outputs are far apart', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 200),
+        outputEvent(2, 400),
+        exitEvent(3, 600),
+      ],
+      MAX_SPEED,
+    );
+
+    expect(flushes.map((flush) => flush.chunks)).toEqual([
+      ['out0'],
+      ['out1'],
+      ['out2'],
+    ]);
+  });
+
+  // The frame wait of a flush is the frame of its moment. A hold after every
+  // flush of a run would make each 30 ms step cost 44 ms to export.
+  it('holds max-speed frames only after the last flush of a run of output', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 20),
+        outputEvent(2, 40),
+        exitEvent(3, 50),
+        outputEvent(4, 80),
+      ],
+      MAX_SPEED,
+    );
+
+    // out0 and out1 flush when the next output arrives, so no hold follows
+    // them. The exit ends the run: out2 flushes, and its hold delays out4.
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0'] },
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out1'] },
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out2'] },
+      { atMs: FIRST_EVENT_AT_MS + 16, chunks: ['out4'] },
+    ]);
+  });
+
+  it('does not merge max-speed moments when a flush costs more than a frame hold', async () => {
+    const events = Array.from({ length: 101 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(101, 1_000));
+    const flushes = await replayAndRecordFlushes(events, MAX_SPEED, 30);
+
+    // Recorded timing lets batches grow while the replay is behind its
+    // schedule. Max-speed has no schedule, so a slow flush must not hide a
+    // moment: every flush holds the outputs of one frame hold (two events).
+    expect(flushes.length).toBe(51);
+    expect(flushes.every((flush) => flush.chunks.length <= 2)).toBe(true);
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events.slice(0, 101).map((event) => `out${String(event.seq)}`),
+    );
+  });
+
+  it('keeps accelerated frames at least one frame hold of recorded time apart', async () => {
+    const accelerated: ReplayTimingOptions = {
+      mode: 'accelerated',
+      maxGapMs: 400,
+      minFrameHoldMs: 100,
+      finalFrameHoldMs: 1_000,
+    };
+    const events = Array.from({ length: 41 }, (_, index) =>
+      outputEvent(index, index * 30),
+    );
+    events.push(exitEvent(41, 1_300));
+    const flushes = await replayAndRecordFlushes(events, accelerated);
+
+    // 30 ms steps, 100 ms holds: a flush takes the outputs of four steps.
+    expect(flushes.map((flush) => flush.chunks.length)).toEqual([
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1,
+    ]);
+    for (let index = 1; index < flushes.length; index += 1) {
+      const gapMs =
+        (flushes[index]?.atMs ?? 0) - (flushes[index - 1]?.atMs ?? 0);
+      expect(gapMs).toBeGreaterThanOrEqual(100);
+    }
   });
 
   it('refreshes continuous output at least once per frame hold', async () => {
