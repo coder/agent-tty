@@ -1073,6 +1073,99 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     ).toBe('abcd');
   });
 
+  // A resize can bring graphemes on the screen that no flush showed: growing
+  // the screen pulls lines back from the scrollback. The note that follows the
+  // resize records them, and the next flush then erases the screen.
+  it('records a glyph that a resize brings back from the scrollback', async () => {
+    await backend.boot();
+
+    await backend.replayWithTiming(
+      createReplayInput([
+        {
+          seq: 0,
+          ts: timestampFor(0),
+          type: 'output',
+          payload: {
+            data: `\u0378\r\n${Array.from({ length: 30 }, (_, line) => `line ${String(line)}\r\n`).join('')}`,
+          },
+        },
+        {
+          seq: 1,
+          ts: timestampFor(1),
+          type: 'resize',
+          payload: { cols: 80, rows: 40 },
+        },
+        {
+          seq: 2,
+          ts: timestampFor(2),
+          type: 'output',
+          payload: { data: '\u001b[2J\u001b[Hok' },
+        },
+      ]),
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 200 },
+    );
+
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+    });
+  });
+
+  // The page keeps the size attributes of the body (data-cols, data-rows) in
+  // step with the terminal after every write. The call that ends a flush does
+  // it too, as write() does.
+  it('refreshes the size attributes of the document when a flush ends', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await page.evaluate('window.__agentTty.resize(80, 24)');
+    const sizeAttributes = (): Promise<string> =>
+      page.evaluate(
+        `document.body.dataset.cols + 'x' + document.body.dataset.rows`,
+      ) as Promise<string>;
+    expect(await sizeAttributes()).toBe('80x24');
+    await page.evaluate(
+      `document.body.dataset.cols = 'stale'; document.body.dataset.rows = 'stale'`,
+    );
+
+    await page.evaluate(`window.__agentTty.writeBatch(['ab'], false)`);
+    expect(await sizeAttributes()).toBe('stalexstale');
+    await page.evaluate(`window.__agentTty.writeBatch(['cd'], true)`);
+
+    expect(await sizeAttributes()).toBe('80x24');
+  });
+
+  // The set of painted graphemes feeds a probe of every grapheme in it. The
+  // cap that the backend passes bounds the set, and a set that hit the cap is
+  // reported as incomplete, so the export result says that its list is cut.
+  it('bounds the painted graphemes by the cap of the call that ends a flush', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await page.evaluate('window.__agentTty.resize(80, 24)');
+    const painted = (): Promise<{ seen: string[]; complete: boolean } | null> =>
+      page.evaluate(
+        `(() => {
+          const state = window.__agentTtyPainted;
+          return state === undefined ? null : { seen: [...state.seen], complete: state.complete };
+        })()`,
+      ) as Promise<{ seen: string[]; complete: boolean } | null>;
+
+    // Nothing is noted while the call does not ask for it.
+    await page.evaluate(`window.__agentTty.writeBatch(['abc'], true, null)`);
+    expect(await painted()).toBeNull();
+
+    await page.evaluate(
+      `window.__agentTty.writeBatch(['\\x1b[2J\\x1b[Habc'], true, 5)`,
+    );
+    expect(await painted()).toEqual({ seen: ['a', 'b', 'c'], complete: true });
+
+    await page.evaluate(
+      `window.__agentTty.writeBatch(['\\x1b[2J\\x1b[Hdefgh'], true, 5)`,
+    );
+    expect(await painted()).toEqual({
+      seen: ['a', 'b', 'c', 'd', 'e'],
+      complete: false,
+    });
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 

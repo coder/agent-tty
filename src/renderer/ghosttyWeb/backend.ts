@@ -138,13 +138,12 @@ const WASM_CONTENT_TYPE = 'application/wasm';
 
 const MAX_REPLAY_BATCH_SIZE = 1000;
 /**
- * A max-speed replay flushes at most about this many times, however long the
+ * A max-speed replay makes at most about this many flushes, however long the
  * recording is. A flush costs one animation frame, one page call and one scan
  * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 112 ms at 200x60 in the
  * median of five sparse-log runs (host load 40 to 100). The limit then takes
  * 1 to 4.5 minutes, under the 5 minutes that a WebM export allows its replay.
- * The video has 25 frames per second, so a viewer cannot tell more than this
- * many states apart in a video of that length.
+ * The video has 25 frames per second, so this many flushes fill 96 s of video.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
@@ -688,7 +687,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     }
 
     // Output shows once the next event is this far after the batch's first
-    // output. It is at least 1 ms: events with one timestamp are one moment.
+    // output. It is at least 1 ms: events with one timestamp share a flush.
     // Max-speed has no schedule that bounds its replay time, so it also
     // spreads a fixed number of flushes over the recorded span: a sparse
     // recording then costs the same number of frames as a dense one.
@@ -725,8 +724,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
 
     // Events that change no pixel end a flush in recorded and accelerated
     // mode, where the pause before them is part of the video. Max-speed has no
-    // pauses: a flush at each of them would cost one frame per event, and a
-    // viewer cannot tell apart what happens within one minimum split.
+    // pauses: a flush at each of them would cost one frame per event. So only
+    // recorded time ends a max-speed flush, and output on both sides of such
+    // an event shares a flush when it is less than one minimum split apart.
     const flushBeforeNonVisualEvent = async (): Promise<void> => {
       if (timing.mode !== 'max-speed') {
         await flushOutputBatch();
@@ -767,12 +767,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         // Output shows once its batch is a minimum split old, unless the
         // replay runs behind the schedule: then batches grow until it catches
         // up, so slow flushes lower the frame rate instead of stretching the
-        // video. Max-speed has no schedule to fall behind. It flushes every
-        // minimum split of recorded time, so each moment that a viewer could
-        // tell apart gets a frame, within the frame budget. The frame wait of
-        // such a flush is already the frame of its moment, so max-speed holds
-        // only after a flush that ends the replay or comes before a resize: a
-        // hold after every flush would export 30 ms steps slower than they ran.
+        // video. Max-speed has no schedule to fall behind. It flushes once per
+        // minimum split of recorded time at most, within the frame budget.
+        // The frame wait of such a flush is already its frame, so max-speed
+        // holds only after a flush that ends the replay or comes before a
+        // resize: a hold after every flush would export 30 ms steps slower
+        // than they ran.
         if (
           pendingSinceTimestampMs !== null &&
           eventTimestampMs - pendingSinceTimestampMs >= minSplitMs &&
