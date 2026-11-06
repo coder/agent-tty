@@ -22,6 +22,7 @@ import {
   MAX_EVENT_LOG_SIZE,
   parseEventLogContent,
 } from '../storage/eventLogCodec.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 
@@ -443,6 +444,18 @@ export class EventLog {
     type: EventLogEventType,
     payload: EventLogPayload,
   ): Promise<number> {
+    // Only `recordStop` writes the stop marker, so a reopened log can trust a
+    // marker with this prefix (see `isStopMarker`).
+    if (
+      type === 'marker' &&
+      (payload as MarkerEventPayload).label.startsWith(
+        EVENT_LOG_LIMIT_LABEL_PREFIX,
+      )
+    ) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: `A marker label must not start with "${EVENT_LOG_LIMIT_LABEL_PREFIX}": agent-tty reserves it for the record that stops the event log.`,
+      });
+    }
     return await this.queueAppend(type, payload).written;
   }
 

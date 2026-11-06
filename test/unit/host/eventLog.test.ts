@@ -873,6 +873,33 @@ describe('EventLog size limit', () => {
     ]);
   });
 
+  it('refuses a marker label that starts with the stop record prefix', async () => {
+    const log = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    try {
+      await log.append('output', { data: 'prompt$ ' });
+      await expect(
+        log.append('marker', {
+          label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (8192 bytes); later events are not recorded`,
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_INPUT',
+        message: `A marker label must not start with "${EVENT_LOG_LIMIT_LABEL_PREFIX}": agent-tty reserves it for the record that stops the event log.`,
+      });
+      await expect(log.append('marker', { label: 'ok' })).resolves.toBe(1);
+    } finally {
+      await log.close();
+    }
+
+    const reopened = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
+    try {
+      await expect(reopened.append('output', { data: 'more' })).resolves.toBe(
+        2,
+      );
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it('does not treat other markers as the stop record when it opens a log', async () => {
     const first = await EventLog.open(eventLogPath, { maxBytes: LIMIT });
     try {
