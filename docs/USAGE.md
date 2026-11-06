@@ -262,6 +262,8 @@ Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghos
 
 On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast, a blank WebM or a blank SVG of the session's size, with `durationMs: 0`. An animated SVG of such a session reports `durationMs: 1000`, the hold of its one blank frame. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png`, `recording--1-<format>.<ext>` and `recording--1-svg-<profile>[-animated].svg`.
 
+A live `screenshot`, and a live `snapshot --renderer ghostty-web`, first replay the session's event log into the host's renderer. The more events the log holds, the longer that takes. The command waits for as long as the replay moves forward, also when the replay belongs to a command that started earlier. It fails with `HOST_TIMEOUT` (exit 5) after 5 s in which the host has made no progress, for example when the renderer hangs.
+
 The screenshot hides the cursor unless you pass `--show-cursor`. `--hide-cursor` is the default, and the result reports `cursorVisible` for the choice.
 
 ```bash
