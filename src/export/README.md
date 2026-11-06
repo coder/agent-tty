@@ -6,7 +6,7 @@ This directory converts a session's event log into recording exports. `generateA
 
 ## Interface
 
-- `AsciicastHeader`: `version: 2`, `width`, `height`, `timestamp`, `title`, optional `sessionId` and `toolVersion`, and `env.TERM` [asciicast.ts:AsciicastHeader].
+- `AsciicastHeader`: `version: 2`, `width`, `height`, `timestamp`, `title`, optional `sessionId` and `toolVersion`, and `env.TERM`. `width` and `height` are the creation size of the session (`manifest.creationCols` and `manifest.creationRows`, or `manifest.cols` and `manifest.rows` when they are absent), the size that replay starts from. A later `resize` event becomes an `r` line, so a resized session keeps its first size in the header [asciicast.ts:AsciicastHeader].
 - `AsciicastExport`: `contents`, `header`, `capturedAtSeq`, `durationMs`, `outputEventCount`, `resizeEventCount` and `markerCount` [asciicast.ts:AsciicastExport].
 - `generateAsciicast(sessionId, manifest, events, toolVersion?)` returns an `AsciicastExport`. It runs synchronously [asciicast.ts:generateAsciicast].
 - `WebmExportOptions`: `sessionId`, `sessionDir`, `manifest`, `events`, `outputPath`, and optional `targetSeq`, `profileName`, `timingMode` and `rendererName` [webm.ts:WebmExportOptions].
@@ -17,7 +17,7 @@ This directory converts a session's event log into recording exports. `generateA
 
 ## Invariants
 
-- `generateAsciicast` asserts a non-empty `sessionId` equal to `manifest.sessionId`, positive `manifest.cols` and `manifest.rows`, and a non-empty `toolVersion` when given [asciicast.ts:generateAsciicast]. `manifest.createdAt` must parse as a valid timestamp even when there are events. The header uses it when `events` is empty [asciicast.ts:parseTimestamp].
+- `generateAsciicast` asserts a non-empty `sessionId` equal to `manifest.sessionId`, a positive initial width and height (`manifest.creationCols ?? manifest.cols` and `manifest.creationRows ?? manifest.rows`, as in `buildReplayInput`), and a non-empty `toolVersion` when given [asciicast.ts:generateAsciicast]. `manifest.createdAt` must parse as a valid timestamp even when there are events. The header uses it when `events` is empty [asciicast.ts:parseTimestamp].
 - Event timestamps must parse to finite numbers [asciicast.ts:parseTimestamp]. They must not decrease from one event to the next [asciicast.ts:generateAsciicast].
 - Event mapping: `output` becomes `o`, `resize` becomes `r` with `COLSxROWS`, and `marker` becomes `m`. Input, run, signal and exit events are skipped. An unknown type reaches `unreachable()` [asciicast.ts:generateAsciicast].
 - `generateWebmExport` asserts a non-empty `sessionId`, absolute `sessionDir` and `outputPath`, and positive initial dimensions. An empty event list gives a blank video with `capturedAtSeq` -1 and `durationMs` 0 [webm.ts:generateWebmExport].

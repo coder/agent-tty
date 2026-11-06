@@ -19,8 +19,10 @@ import {
 } from '../protocol/schemas.js';
 import {
   assertEventLogSize,
+  MAX_EVENT_LOG_SIZE,
   parseEventLogContent,
 } from '../storage/eventLogCodec.js';
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import { invariant } from '../util/assert.js';
 import { hasErrorCode } from '../util/hasErrorCode.js';
 
@@ -115,8 +117,52 @@ export interface StartedAppend {
 /**
  * Maximum number of events retained in the in-memory buffer.
  * At ~200 bytes per event object, 250k events ≈ 50MB — consistent with the file size limit.
+ * The log stops at this count the same way it stops at its byte limit.
  */
 export const MAX_EVENT_BUFFER_ENTRIES = 250_000;
+
+/**
+ * Room that ordinary records leave free at the end of the file. The stop
+ * record and the `exit` record are written inside it, so the file never
+ * passes its limit. Both records are far smaller than this.
+ */
+export const EVENT_LOG_TAIL_RESERVE_BYTES = 4096;
+
+/**
+ * Entries that ordinary records leave free in the buffer: one for the stop
+ * record and one for the `exit` record.
+ */
+export const EVENT_LOG_TAIL_RESERVE_ENTRIES = 2;
+
+/**
+ * Start of the label of the marker that records why the log stopped. The rest
+ * of the label names the limit that was reached: `(<n> bytes)` for the file
+ * size, `(<n> events)` for the entry count.
+ */
+export const EVENT_LOG_LIMIT_LABEL_PREFIX =
+  'agent-tty: event log limit reached';
+
+export interface EventLogOptions {
+  /**
+   * Size limit of the file in bytes. Defaults to `MAX_EVENT_LOG_SIZE`, which
+   * readers enforce, and cannot exceed it. Tests inject a small limit.
+   */
+  readonly maxBytes?: number;
+  /**
+   * Limit of the number of events. Defaults to `MAX_EVENT_BUFFER_ENTRIES` and
+   * cannot exceed it. Tests inject a small limit.
+   */
+  readonly maxEntries?: number;
+}
+
+/** The limit that stopped the log. */
+type StopReason = 'bytes' | 'entries';
+
+interface PreparedRecord {
+  readonly record: EventRecord;
+  readonly line: string;
+  readonly bytes: number;
+}
 
 function assertFilePath(filePath: string): void {
   invariant(filePath.length > 0, 'filePath must be a non-empty string');
@@ -197,6 +243,14 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   return lastRecord.seq + 1;
 }
 
+/** True for the marker that `recordStop` writes when the log stops. */
+function isStopMarker(record: EventRecord): boolean {
+  return (
+    record.type === 'marker' &&
+    record.payload.label.startsWith(EVENT_LOG_LIMIT_LABEL_PREFIX)
+  );
+}
+
 /**
  * Returns the event log file size in bytes, or `undefined` when the file
  * does not exist (ENOENT). Non-ENOENT errors propagate to the caller.
@@ -255,16 +309,44 @@ export class EventLog {
 
   private eventBuffer: EventRecord[] = [];
 
+  // Bytes of the file once every queued write has landed. A failed write does
+  // not give its bytes back: the poisoned writeQueue rejects every later
+  // append anyway.
+  private fileBytes: number;
+
   private constructor(
     filePath: string,
     private readonly fileHandle: FileHandle,
     private nextSeq: number,
+    fileBytes: number,
+    private readonly maxBytes: number,
+    private readonly maxEntries: number,
     eventBuffer: EventRecord[] = [],
+    // Set once the log has stopped taking records. See `queueAppend`. A log
+    // that holds its stop marker starts stopped.
+    private stopped = false,
     private isClosed = false,
   ) {
     invariant(filePath.length > 0, 'filePath must be a non-empty string');
     invariant(Number.isInteger(nextSeq), 'nextSeq must be an integer');
     invariant(nextSeq >= 0, 'nextSeq must be non-negative');
+    invariant(
+      Number.isInteger(fileBytes) && fileBytes >= 0,
+      'fileBytes must be a non-negative integer',
+    );
+    invariant(
+      Number.isInteger(maxBytes) &&
+        maxBytes > EVENT_LOG_TAIL_RESERVE_BYTES &&
+        maxBytes <= MAX_EVENT_LOG_SIZE,
+      'maxBytes must leave room beyond the tail reserve and must not exceed MAX_EVENT_LOG_SIZE',
+    );
+    invariant(
+      Number.isInteger(maxEntries) &&
+        maxEntries > EVENT_LOG_TAIL_RESERVE_ENTRIES &&
+        maxEntries <= MAX_EVENT_BUFFER_ENTRIES,
+      'maxEntries must leave room beyond the tail reserve and must not exceed MAX_EVENT_BUFFER_ENTRIES',
+    );
+    this.fileBytes = fileBytes;
     invariant(
       nextSeq === eventBuffer.length,
       'nextSeq must match buffered event count',
@@ -272,8 +354,13 @@ export class EventLog {
     this.eventBuffer = eventBuffer;
   }
 
-  static async open(filePath: string): Promise<EventLog> {
+  static async open(
+    filePath: string,
+    options: EventLogOptions = {},
+  ): Promise<EventLog> {
     assertFilePath(filePath);
+    const maxBytes = options.maxBytes ?? MAX_EVENT_LOG_SIZE;
+    const maxEntries = options.maxEntries ?? MAX_EVENT_BUFFER_ENTRIES;
 
     const fileHandle = await open(filePath, 'a');
     try {
@@ -294,7 +381,30 @@ export class EventLog {
         invariant(nextSeq >= 0, 'derived next seq must be non-negative');
       }
 
-      return new EventLog(filePath, fileHandle, nextSeq, eventBuffer);
+      // A file of blank lines holds no record. When its size is already inside
+      // the tail reserve, the stop marker may not fit, and a dropped append
+      // would have no earlier record whose `seq` it could report. This host
+      // never writes such a file, so refuse it instead of starting a log that
+      // could not stop.
+      if (
+        eventBuffer.length === 0 &&
+        fileStats.size > maxBytes - EVENT_LOG_TAIL_RESERVE_BYTES
+      ) {
+        throw new Error(
+          `event log ${filePath} holds no record, and its ${String(fileStats.size)} bytes leave less than ${String(EVENT_LOG_TAIL_RESERVE_BYTES)} bytes free under the ${String(maxBytes)}-byte limit`,
+        );
+      }
+
+      return new EventLog(
+        filePath,
+        fileHandle,
+        nextSeq,
+        fileStats.size,
+        maxBytes,
+        maxEntries,
+        eventBuffer,
+        eventBuffer.some(isStopMarker),
+      );
     } catch (error) {
       await fileHandle.close();
       throw error;
@@ -334,6 +444,18 @@ export class EventLog {
     type: EventLogEventType,
     payload: EventLogPayload,
   ): Promise<number> {
+    // Only `recordStop` writes the stop marker, so a reopened log can trust a
+    // marker with this prefix (see `isStopMarker`).
+    if (
+      type === 'marker' &&
+      (payload as MarkerEventPayload).label.startsWith(
+        EVENT_LOG_LIMIT_LABEL_PREFIX,
+      )
+    ) {
+      throw makeCliError(ERROR_CODES.INVALID_INPUT, {
+        message: `A marker label must not start with "${EVENT_LOG_LIMIT_LABEL_PREFIX}": agent-tty reserves it for the record that stops the event log.`,
+      });
+    }
     return await this.queueAppend(type, payload).written;
   }
 
@@ -341,6 +463,25 @@ export class EventLog {
     return this.queueAppend(type, payload);
   }
 
+  /**
+   * Appends a record while the log has room, and otherwise stops the log:
+   *
+   * - Ordinary records may fill the file up to `maxBytes` minus
+   *   `EVENT_LOG_TAIL_RESERVE_BYTES`, and the buffer up to `maxEntries` minus
+   *   `EVENT_LOG_TAIL_RESERVE_ENTRIES`.
+   * - The first record that does not fit stops the log. The log appends one
+   *   stop marker inside the reserve (see `recordStop`), and from then on it
+   *   records nothing but the `exit` record, which also fits in the reserve.
+   * - A stopped log raises no error. It acknowledges a record that it does
+   *   not store with the `seq` of the last stored record, so input handlers,
+   *   run completion and resize keep working, and the program keeps running.
+   *   Its later output, input, resizes, signals and markers are absent from
+   *   the log, and so from every snapshot, screenshot and export, which
+   *   replay the log.
+   *
+   * `seq` values stay contiguous because a record that is not stored never
+   * takes one.
+   */
   private queueAppend(
     type: EventLogEventType,
     payload: EventLogPayload,
@@ -348,45 +489,132 @@ export class EventLog {
     invariant(!this.isClosed, 'cannot append to a closed event log');
 
     const validatedPayload = validatePayload(type, payload);
-    const seq = this.nextSeq;
-    invariant(
-      seq === this.nextSeq,
-      'event seq must match the expected next seq',
-    );
-    invariant(seq >= 0, 'event seq must be non-negative');
-    this.nextSeq += 1;
+    if (this.stopped && type !== 'exit') {
+      // A runaway program keeps printing: do not build records to drop.
+      return this.acknowledgeUnstored();
+    }
 
-    const record = {
+    const prepared = this.prepareRecord(type, validatedPayload);
+    const stopReason = this.findStopReason(type, prepared.bytes);
+    if (stopReason === undefined) {
+      return this.enqueue(prepared);
+    }
+
+    if (!this.stopped) {
+      this.recordStop(stopReason);
+    }
+    return this.acknowledgeUnstored();
+  }
+
+  private prepareRecord(
+    type: EventLogEventType,
+    validatedPayload: EventLogPayload,
+  ): PreparedRecord {
+    const seq = this.nextSeq;
+    invariant(seq >= 0, 'event seq must be non-negative');
+
+    const parsedRecord = EventRecordSchema.safeParse({
       seq,
       ts: new Date().toISOString(),
       type,
       payload: validatedPayload,
-    };
-
-    invariant(
-      record.seq === seq,
-      'event record seq must match the reserved seq',
-    );
-
-    const parsedRecord = EventRecordSchema.safeParse(record);
+    });
     invariant(
       parsedRecord.success,
       'event record must match EventRecordSchema',
     );
-    if (this.eventBuffer.length >= MAX_EVENT_BUFFER_ENTRIES) {
-      this.nextSeq = seq;
-    }
-    invariant(
-      this.eventBuffer.length < MAX_EVENT_BUFFER_ENTRIES,
-      `event buffer exceeds ${String(MAX_EVENT_BUFFER_ENTRIES)} entries; session event log is too large`,
-    );
-    invariant(
-      parsedRecord.data.seq === this.eventBuffer.length,
-      'event record seq must match the buffered event count',
-    );
-    this.eventBuffer.push(parsedRecord.data);
 
     const line = `${JSON.stringify(parsedRecord.data)}\n`;
+    return {
+      record: parsedRecord.data,
+      line,
+      bytes: Buffer.byteLength(line, 'utf8'),
+    };
+  }
+
+  /**
+   * Returns the limit that a record of `bytes` bytes would pass, or
+   * `undefined` when it fits. The last record of a session, `exit`, may use
+   * the reserves. When both limits are passed, the byte limit is the reason.
+   */
+  private findStopReason(
+    type: EventLogEventType,
+    bytes: number,
+  ): StopReason | undefined {
+    const reserveBytes = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_BYTES;
+    const reserveEntries = type === 'exit' ? 0 : EVENT_LOG_TAIL_RESERVE_ENTRIES;
+
+    if (bytes > this.maxBytes - this.fileBytes - reserveBytes) {
+      return 'bytes';
+    }
+    if (this.eventBuffer.length + 1 > this.maxEntries - reserveEntries) {
+      return 'entries';
+    }
+    return undefined;
+  }
+
+  /**
+   * Stops the log and records why, once. The marker is the only existing
+   * event type that fits: it carries a label, replayers ignore it, and the
+   * asciicast export shows it as a marker. Its label names the limit that was
+   * reached: bytes or events. It goes into the reserves, so it fits unless a
+   * log that this host did not write already filled them before it opened.
+   */
+  private recordStop(reason: StopReason): void {
+    this.stopped = true;
+
+    const limit =
+      reason === 'bytes'
+        ? `${String(this.maxBytes)} bytes`
+        : `${String(this.maxEntries)} events`;
+    const stop = this.prepareRecord('marker', {
+      label: `${EVENT_LOG_LIMIT_LABEL_PREFIX} (${limit}); later events are not recorded`,
+    });
+    if (
+      stop.bytes > this.maxBytes - this.fileBytes ||
+      this.eventBuffer.length + 1 > this.maxEntries
+    ) {
+      return;
+    }
+
+    // A failed write reaches the caller through the poisoned writeQueue.
+    this.enqueue(stop).written.catch(() => undefined);
+  }
+
+  private acknowledgeUnstored(): StartedAppend {
+    const seq = this.nextSeq - 1;
+    invariant(
+      seq >= 0,
+      'a log that does not store a record must hold an earlier record',
+    );
+
+    // Chained on the writeQueue so that the caller sees an earlier failed
+    // write, and so that the seq is durable once this settles.
+    return { seq, written: this.writeQueue.then(() => seq) };
+  }
+
+  private enqueue({ record, line, bytes }: PreparedRecord): StartedAppend {
+    const seq = record.seq;
+    invariant(
+      seq === this.nextSeq,
+      'event seq must match the expected next seq',
+    );
+    invariant(
+      this.eventBuffer.length < this.maxEntries,
+      `event buffer exceeds ${String(this.maxEntries)} entries; session event log is too large`,
+    );
+    invariant(
+      seq === this.eventBuffer.length,
+      'event record seq must match the buffered event count',
+    );
+    invariant(
+      this.fileBytes + bytes <= this.maxBytes,
+      'event log append must stay inside the size limit',
+    );
+    this.nextSeq += 1;
+    this.eventBuffer.push(record);
+    this.fileBytes += bytes;
+
     const writePromise = this.writeQueue.then(async () => {
       try {
         await this.fileHandle.appendFile(line, 'utf8');

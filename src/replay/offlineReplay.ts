@@ -1,7 +1,10 @@
 import { basename, isAbsolute, resolve } from 'node:path';
 
 import { buildReplayInput } from '../host/replay.js';
-import { readEventLogRecords } from '../storage/eventLogCodec.js';
+import {
+  EventLogTooLargeError,
+  readEventLogRecords,
+} from '../storage/eventLogCodec.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 import type { RendererBackend } from '../renderer/backend.js';
@@ -99,6 +102,16 @@ async function readOfflineReplayInput(
   } catch (error) {
     if (isEnoentError(error)) {
       events = [];
+    } else if (error instanceof EventLogTooLargeError) {
+      throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
+        message: `Failed to read event log: ${eventLogFile} is ${String(error.size)} bytes, over the ${String(error.maxSize)}-byte limit that commands can read.`,
+        details: {
+          eventLogPath: eventLogFile,
+          eventLogBytes: error.size,
+          maxEventLogBytes: error.maxSize,
+        },
+        cause: error,
+      });
     } else {
       throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
         message: `Failed to read event log: ${eventLogFile}`,

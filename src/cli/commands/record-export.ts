@@ -16,7 +16,10 @@ import {
   type WebmExportResult,
 } from '../../export/webm.js';
 import { captureGridFrames } from '../../replay/gridFrames.js';
-import { readEventLogRecords } from '../../storage/eventLogCodec.js';
+import {
+  EventLogTooLargeError,
+  readEventLogRecords,
+} from '../../storage/eventLogCodec.js';
 import {
   getBuiltinProfile,
   hashProfile,
@@ -577,6 +580,20 @@ export async function runRecordExportCommand(
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
+    }
+
+    if (error instanceof EventLogTooLargeError) {
+      throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
+        message: `Failed to export session "${options.sessionId}" as ${format}: its event log is ${String(error.size)} bytes, over the ${String(error.maxSize)}-byte limit that commands can read.`,
+        details: {
+          sessionId: options.sessionId,
+          format,
+          out: options.out,
+          eventLogBytes: error.size,
+          maxEventLogBytes: error.maxSize,
+        },
+        cause: error,
+      });
     }
 
     throw makeCliError(ERROR_CODES.EXPORT_ERROR, {

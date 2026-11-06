@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { generateAsciicast } from '../../../src/export/asciicast.js';
+import { buildReplayInput } from '../../../src/host/replay.js';
 import type {
   EventRecord,
   SessionRecord,
@@ -205,6 +206,86 @@ describe('generateAsciicast', () => {
     expect(result.markerCount).toBe(0);
     expect(result.capturedAtSeq).toBe(2);
     expect(result.durationMs).toBe(1000);
+  });
+
+  it('names the creation size in the header and the later size in an r line', () => {
+    // The session started at 80x24 and was resized to 100x30, so the manifest
+    // holds the final size. The first output was written at 80x24.
+    const manifest = createManifest({
+      cols: 100,
+      rows: 30,
+      creationCols: 80,
+      creationRows: 24,
+    });
+    const events: EventRecord[] = [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:01.000Z',
+        type: 'output',
+        payload: { data: 'before' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'resize',
+        payload: { cols: 100, rows: 30 },
+      },
+      {
+        seq: 2,
+        ts: '2026-03-19T12:00:03.000Z',
+        type: 'output',
+        payload: { data: 'after' },
+      },
+    ];
+
+    const result = generateAsciicast('session-01', manifest, events);
+
+    expect(result.header).toMatchObject({ width: 80, height: 24 });
+    expect(parseAsciicastLines(result.contents)).toEqual([
+      result.header,
+      [0, 'o', 'before'],
+      [1, 'r', '100x30'],
+      [2, 'o', 'after'],
+    ]);
+
+    // Replay starts from the same size.
+    const replay = buildReplayInput('session-01', manifest, events);
+    expect([result.header.width, result.header.height]).toEqual([
+      replay.initialCols,
+      replay.initialRows,
+    ]);
+  });
+
+  it('names the creation size when a resize after a stopped log was dropped', () => {
+    // The log stopped before the resize, so it holds no `r` line. The header
+    // still names the size that the stored output was written at.
+    const manifest = createManifest({
+      cols: 100,
+      rows: 30,
+      creationCols: 80,
+      creationRows: 24,
+    });
+
+    const result = generateAsciicast('session-01', manifest, [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:01.000Z',
+        type: 'output',
+        payload: { data: 'stored' },
+      },
+      {
+        seq: 1,
+        ts: '2026-03-19T12:00:02.000Z',
+        type: 'marker',
+        payload: {
+          label:
+            'agent-tty: event log limit reached (52428800 bytes); later events are not recorded',
+        },
+      },
+    ]);
+
+    expect(result.header).toMatchObject({ width: 80, height: 24 });
+    expect(result.resizeEventCount).toBe(0);
   });
 
   it('produces a header-only cast for empty event logs', () => {

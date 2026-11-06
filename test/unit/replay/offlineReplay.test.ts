@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -13,6 +13,7 @@ import type {
 import { withOfflineReplayRenderer } from '../../../src/replay/offlineReplay.js';
 import type { RendererBackend } from '../../../src/renderer/backend.js';
 import type { ReplayInput, ReplayState } from '../../../src/renderer/types.js';
+import { MAX_EVENT_LOG_SIZE } from '../../../src/storage/eventLogCodec.js';
 import { writeManifest } from '../../../src/storage/manifests.js';
 import {
   eventLogPath,
@@ -557,6 +558,53 @@ describe('withOfflineReplayRenderer', () => {
     });
     expect(backend.booted).toBe(false);
     expect(backend.disposed).toBe(true);
+  });
+
+  it('names the size limit when the event log is too large', async () => {
+    const { sessionDir } = await createSessionFixture();
+    const eventsFile = eventLogPath(sessionDir);
+    await truncate(eventsFile, MAX_EVENT_LOG_SIZE + 1);
+    const backend = createMockBackend();
+
+    const replayPromise = withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.resolve('unreachable'),
+      { backendFactory: () => backend },
+    );
+
+    await expect(replayPromise).rejects.toMatchObject({
+      name: 'CliError',
+      code: ERROR_CODES.REPLAY_ERROR,
+      message: `Failed to read event log: ${eventsFile} is ${String(MAX_EVENT_LOG_SIZE + 1)} bytes, over the ${String(MAX_EVENT_LOG_SIZE)}-byte limit that commands can read.`,
+      details: {
+        eventLogPath: eventsFile,
+        eventLogBytes: MAX_EVENT_LOG_SIZE + 1,
+        maxEventLogBytes: MAX_EVENT_LOG_SIZE,
+      },
+    });
+    expect(backend.booted).toBe(false);
+    expect(backend.disposed).toBe(true);
+  });
+
+  it('keeps the generic message for other event log read failures', async () => {
+    const { sessionDir } = await createSessionFixture({
+      eventsContents: '{"seq":0',
+    });
+    const eventsFile = eventLogPath(sessionDir);
+    const backend = createMockBackend();
+
+    const replayPromise = withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.resolve('unreachable'),
+      { backendFactory: () => backend },
+    );
+
+    await expect(replayPromise).rejects.toMatchObject({
+      name: 'CliError',
+      code: ERROR_CODES.REPLAY_ERROR,
+      message: `Failed to read event log: ${eventsFile}`,
+      details: {},
+    });
   });
 
   it('wraps non-contiguous event log sequences as REPLAY_ERROR and still disposes the backend', async () => {
