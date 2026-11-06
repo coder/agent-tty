@@ -533,3 +533,58 @@ describe('RpcServer keep-alive', () => {
     }
   });
 });
+
+describe('RpcServer waitForRender results', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-server-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  it('carries the event log stop of a timed-out wait to the client', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const timedOut = {
+      matched: false,
+      timedOut: true,
+      capturedAtSeq: 7,
+      eventLogStop: { reason: 'bytes', seq: 7 },
+    };
+    const server = new RpcServer(socketFile, {
+      waitForRender: () => Promise.resolve(timedOut),
+    });
+    await server.listen();
+
+    try {
+      await expect(
+        sendRpc(socketFile, 'waitForRender', { text: 'later' }, 5_000),
+      ).resolves.toEqual(timedOut);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('refuses a wait result whose event log stop names no reason', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const server = new RpcServer(socketFile, {
+      waitForRender: () =>
+        Promise.resolve({
+          matched: false,
+          timedOut: true,
+          capturedAtSeq: 7,
+          eventLogStop: { seq: 7 },
+        }),
+    });
+    await server.listen();
+
+    try {
+      await expect(
+        sendRpc(socketFile, 'waitForRender', { text: 'later' }, 5_000),
+      ).rejects.toMatchObject({ code: 'RPC_ERROR' });
+    } finally {
+      await server.close();
+    }
+  });
+});

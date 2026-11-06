@@ -1305,6 +1305,27 @@ describe('JSON envelope contracts', () => {
     expect(InspectResultSchema.safeParse(result).success).toBe(true);
   });
 
+  it('locks the inspect success envelope shape when the event log stopped', () => {
+    const result = InspectResultSchema.parse({
+      session: createSessionRecord(),
+      eventCount: 250_000,
+      uptime: 1_000,
+      lastEventSeq: 249_999,
+      terminationCategory: 'running',
+      usedOfflineReplay: false,
+      rendererRuntime: {
+        backend: 'ghostty-web',
+        mode: 'live-host',
+        status: 'healthy',
+      },
+      eventLogBytes: 21_400_000,
+      eventLogStop: { reason: 'events', seq: 249_998 },
+    });
+
+    expectLockedSuccessEnvelope('inspect', result);
+    expect(result.eventLogStop).toEqual({ reason: 'events', seq: 249_998 });
+  });
+
   it('accepts inspect result with offline renderer runtime', () => {
     const result = {
       session: createSessionRecord(),
@@ -1569,6 +1590,52 @@ describe('JSON envelope contracts', () => {
         details: { sessionId: 'session-01', timeoutMs: 1000 },
       },
       result: { matched: false, timedOut: true, capturedAtSeq: 7 },
+    });
+  });
+
+  it('locks the WAIT_TIMEOUT error envelope shape when the event log stopped', () => {
+    const eventLogStop = { reason: 'bytes', seq: 7 } as const;
+    const result = WaitForRenderResultSchema.parse({
+      matched: false,
+      timedOut: true,
+      capturedAtSeq: 7,
+      eventLogStop,
+    });
+    const error = makeCliError(ERROR_CODES.WAIT_TIMEOUT, {
+      message:
+        'Wait timed out before its condition was met. The event log stopped at seq 7 (byte limit), so output after it is not seen.',
+      details: { sessionId: 'session-01', timeoutMs: 1000, eventLogStop },
+    });
+
+    const envelope: CommandEnvelope<WaitForRenderResult, WaitForRenderResult> =
+      createErrorEnvelope(
+        'wait',
+        {
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+          details: error.details,
+        },
+        result,
+      );
+
+    expect(envelope).toEqual({
+      ok: false,
+      command: 'wait',
+      timestamp: LOCKED_TIMESTAMP,
+      error: {
+        code: 'WAIT_TIMEOUT',
+        message:
+          'Wait timed out before its condition was met. The event log stopped at seq 7 (byte limit), so output after it is not seen.',
+        retryable: false,
+        details: { sessionId: 'session-01', timeoutMs: 1000, eventLogStop },
+      },
+      result: {
+        matched: false,
+        timedOut: true,
+        capturedAtSeq: 7,
+        eventLogStop,
+      },
     });
   });
 });

@@ -103,13 +103,14 @@ function createOptions(
 
 function mockOfflineReplaySnapshot(
   snapshotOverrides: Parameters<typeof createTestSemanticSnapshot>[0] = {},
+  events: unknown[] = [],
 ): void {
   mocks.withOfflineReplayRenderer.mockImplementation(
     async (
       _options: unknown,
       run: (context: {
         manifest: ReturnType<typeof createSessionRecord>;
-        replayInput: Record<string, never>;
+        replayInput: { events: unknown[] };
         backend: {
           snapshot: (options?: unknown) => Promise<unknown>;
         };
@@ -123,7 +124,7 @@ function mockOfflineReplaySnapshot(
 
       return run({
         manifest: createSessionRecord('exited', 0),
-        replayInput: {},
+        replayInput: { events },
         backend: mockBackend,
       });
     },
@@ -636,6 +637,248 @@ describe('wait command', () => {
         code: ERROR_CODES.WAIT_TIMEOUT,
         message: 'Wait timed out before its condition was met.',
         details: { sessionId: 'session-01', timeoutMs: 30000 },
+      });
+    });
+  });
+
+  describe('when the event log stopped', () => {
+    const renderTimeout = { matched: false, timedOut: true, capturedAtSeq: 1 };
+    const stopped = { reason: 'bytes', seq: 1 };
+    const stopNote =
+      'The event log stopped at seq 1 (byte limit), so output after it is not seen.';
+    const plainTimeout = 'Wait timed out before its condition was met.';
+
+    const stopMarker = (seq: number, label: string) => ({
+      seq,
+      ts: '2026-03-19T12:00:00.000Z',
+      type: 'marker',
+      payload: { label },
+    });
+    const stopEvents = [
+      {
+        seq: 0,
+        ts: '2026-03-19T12:00:00.000Z',
+        type: 'output',
+        payload: { data: 'hello' },
+      },
+      stopMarker(
+        1,
+        'agent-tty: event log limit reached (52428800 bytes); later events are not recorded',
+      ),
+    ];
+
+    it.each([
+      ['--text', { text: 'later' }, 30_000],
+      ['--regex', { regex: 'later.*' }, 30_000],
+      ['--screen-stable-ms', { screenStableMs: 1000, timeout: 5000 }, 5000],
+      ['--cursor-row', { cursorRow: 3 }, 30_000],
+      ['--after-seq', { text: 'later', afterSeq: 0 }, 30_000],
+    ])(
+      'names the stop that the host reports in the WAIT_TIMEOUT of a %s wait',
+      async (_flag, flags, timeoutMs) => {
+        const result = { ...renderTimeout, eventLogStop: stopped };
+        mocks.sendRpc.mockResolvedValue(result);
+
+        await expect(
+          runWaitCommand(createOptions(flags)),
+        ).rejects.toMatchObject({
+          code: ERROR_CODES.WAIT_TIMEOUT,
+          message: `${plainTimeout} ${stopNote}`,
+          details: {
+            sessionId: 'session-01',
+            timeoutMs,
+            eventLogStop: stopped,
+          },
+          result,
+        });
+      },
+    );
+
+    it('names the stop under --json too', async () => {
+      mocks.sendRpc.mockResolvedValue({
+        ...renderTimeout,
+        eventLogStop: stopped,
+      });
+
+      await expect(
+        runWaitCommand(createOptions({ json: true, text: 'later' })),
+      ).rejects.toMatchObject({
+        code: ERROR_CODES.WAIT_TIMEOUT,
+        message: `${plainTimeout} ${stopNote}`,
+      });
+    });
+
+    it('adds the note after the timeout that a human message names', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+      try {
+        mocks.sendRpc.mockImplementation(() => {
+          vi.advanceTimersByTime(1000);
+          return Promise.resolve({ ...renderTimeout, eventLogStop: stopped });
+        });
+
+        await expect(
+          runWaitCommand(createOptions({ text: 'later', timeout: 1000 })),
+        ).rejects.toMatchObject({
+          code: ERROR_CODES.WAIT_TIMEOUT,
+          message: `Wait timed out after 1000 ms. ${stopNote}`,
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.each([
+      ['bytes', 'byte limit'],
+      ['events', 'event limit'],
+      ['unknown', 'reason unknown'],
+    ])('words the %s reason as "%s"', async (reason, words) => {
+      mocks.sendRpc.mockResolvedValue({
+        ...renderTimeout,
+        eventLogStop: { reason, seq: 7 },
+      });
+
+      await expect(
+        runWaitCommand(createOptions({ text: 'later' })),
+      ).rejects.toMatchObject({
+        message: `${plainTimeout} The event log stopped at seq 7 (${words}), so output after it is not seen.`,
+        details: { eventLogStop: { reason, seq: 7 } },
+      });
+    });
+
+    it('keeps the plain WAIT_TIMEOUT when the host reports no stop', async () => {
+      mocks.sendRpc.mockResolvedValue(renderTimeout);
+
+      const error = (await runWaitCommand(
+        createOptions({ text: 'later' }),
+      ).catch((caught: unknown) => caught)) as {
+        message: string;
+        details: object;
+      };
+      expect(error.message).toBe(plainTimeout);
+      expect(error.details).toEqual({
+        sessionId: 'session-01',
+        timeoutMs: 30_000,
+      });
+    });
+
+    it('leaves a wait that matched as it is', async () => {
+      const result = {
+        matched: true,
+        timedOut: false,
+        matchedText: 'hello',
+        capturedAtSeq: 1,
+      };
+      mocks.sendRpc.mockResolvedValue(result);
+
+      await runWaitCommand(createOptions({ text: 'hello' }));
+
+      expect(mocks.emitSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ command: 'wait', result }),
+      );
+    });
+
+    it.each([
+      ['--idle-ms', { idleMs: 500, timeout: 1000 }],
+      ['--exit', { waitForExit: true, timeout: 1000 }],
+    ])(
+      'leaves the WAIT_TIMEOUT of a %s wait as it is',
+      async (_flag, flags) => {
+        mocks.sendRpc.mockResolvedValue({ timedOut: true });
+
+        const error = (await runWaitCommand(createOptions(flags)).catch(
+          (caught: unknown) => caught,
+        )) as { code: string; message: string; details: object };
+        expect(error.code).toBe(ERROR_CODES.WAIT_TIMEOUT);
+        expect(error.message).not.toContain('event log');
+        expect(error.details).toEqual({
+          sessionId: 'session-01',
+          timeoutMs: 1000,
+        });
+      },
+    );
+
+    describe('offline, after the host became unreachable', () => {
+      beforeEach(() => {
+        mocks.sendRpc.mockRejectedValue(
+          makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+            message: 'Session host is unreachable.',
+          }),
+        );
+      });
+
+      it('names the stop of the replayed events when the snapshot does not satisfy the wait', async () => {
+        mockOfflineReplaySnapshot(
+          {
+            capturedAtSeq: 1,
+            visibleLines: [{ row: 0, text: 'hello' }],
+          },
+          stopEvents,
+        );
+
+        await expect(
+          runWaitCommand(createOptions({ text: 'later' })),
+        ).rejects.toMatchObject({
+          code: ERROR_CODES.REPLAY_ERROR,
+          message: `Session host became unreachable during render wait, and the latest offline snapshot did not satisfy the requested wait condition. ${stopNote}`,
+          details: {
+            text: 'later',
+            capturedAtSeq: 1,
+            visibleLines: ['hello'],
+            eventLogStop: stopped,
+          },
+        });
+      });
+
+      it('names a stop whose label names no limit', async () => {
+        mockOfflineReplaySnapshot({ capturedAtSeq: 0 }, [
+          stopMarker(0, 'agent-tty: event log limit reached (soon)'),
+        ]);
+
+        const error = (await runWaitCommand(
+          createOptions({ text: 'later' }),
+        ).catch((caught: unknown) => caught)) as {
+          message: string;
+          details: object;
+        };
+        expect(
+          error.message.endsWith(
+            'The event log stopped at seq 0 (reason unknown), so output after it is not seen.',
+          ),
+        ).toBe(true);
+        expect(error.details).toMatchObject({
+          eventLogStop: { reason: 'unknown', seq: 0 },
+        });
+      });
+
+      it('keeps the plain REPLAY_ERROR when the replayed events hold no stop', async () => {
+        mockOfflineReplaySnapshot(
+          { capturedAtSeq: 0, visibleLines: [{ row: 0, text: 'hello' }] },
+          [stopEvents[0]],
+        );
+
+        const error = (await runWaitCommand(
+          createOptions({ text: 'later' }),
+        ).catch((caught: unknown) => caught)) as {
+          message: string;
+          details: object;
+        };
+        expect(error.message).not.toContain('event log');
+        expect(error.details).not.toHaveProperty('eventLogStop');
+      });
+
+      it('does not name the stop when the snapshot satisfies the wait', async () => {
+        mockOfflineReplaySnapshot(
+          { capturedAtSeq: 1, visibleLines: [{ row: 0, text: 'hello' }] },
+          stopEvents,
+        );
+
+        await runWaitCommand(createOptions({ text: 'hello' }));
+
+        const emitted = mocks.emitSuccess.mock.calls[0] as [
+          { command: string; result: object },
+        ];
+        expect(emitted[0].command).toBe('wait');
+        expect(emitted[0].result).not.toHaveProperty('eventLogStop');
       });
     });
   });

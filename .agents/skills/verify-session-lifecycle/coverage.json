@@ -133,7 +133,7 @@
     "src/host/sessionState.ts#SessionState.requestDestroy": "f66074e815527ff1",
     "src/host/sessionState.ts#SessionState.recordDestroyed": "495b3a20c56b6330",
     "src/host/sessionState.ts#SessionState.recordExit": "a4f3f6706ae953c3",
-    "src/host/eventLog.ts#EventLog.open": "4d4a1c04ce17c37d",
+    "src/host/eventLog.ts#EventLog.open": "19229956e761db8c",
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
     "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
     "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
