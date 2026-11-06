@@ -726,6 +726,60 @@ describe('HostRendererManager replay progress', () => {
     );
   });
 
+  it('goes on in slices from the last slice that finished, when a slice failed', async () => {
+    // The third call of `replayTo` fails once, as when the page crashes.
+    backendFactory = vi.fn(() => {
+      const backend = createReplayingBackend();
+      const replay = backend.replayToMock.getMockImplementation();
+      expect(replay).toBeDefined();
+      let calls = 0;
+      backend.replayToMock.mockImplementation((input: ReplayInput) => {
+        calls += 1;
+        return calls === 3
+          ? Promise.reject(new Error('page crashed'))
+          : (replay as typeof backend.replayTo)(input);
+      });
+      backends.push(backend);
+      return backend;
+    });
+    const manager = createManager();
+    const profile = createProfile();
+
+    await expect(
+      manager.withBackend(
+        'ghostty-web',
+        profile,
+        () => createLongInput(300),
+        () => undefined,
+      ),
+    ).rejects.toThrow('page crashed');
+    const replayCalls = getCreatedBackend(backends, 0).replayToMock.mock.calls;
+    expect(replayCalls).toHaveLength(3);
+    const replayedBeforeRetry = appliedByBackend[0]?.length ?? 0;
+    expect(replayedBeforeRetry).toBeGreaterThan(0);
+    expect(replayedBeforeRetry).toBeLessThan(300);
+
+    await manager.withBackend(
+      'ghostty-web',
+      profile,
+      () => createLongInput(300),
+      () => undefined,
+    );
+
+    // The retry does not start over, and it is not one call that replays all
+    // the events that are left: it has slices, and the last has the input.
+    const retryInputs = replayCalls.slice(3).map(([input]) => input);
+    expect(retryInputs.length).toBeGreaterThan(1);
+    expect(retryInputs[0]?.events[0]?.seq).toBe(replayedBeforeRetry);
+    expect(retryInputs[0]?.events.length).toBeLessThan(
+      300 - replayedBeforeRetry,
+    );
+    expect(retryInputs.at(-1)?.events).toHaveLength(300);
+    expect(appliedByBackend[0]).toEqual(
+      Array.from({ length: 300 }, (_, seq) => seq),
+    );
+  });
+
   it('replays a new backend from the first event', async () => {
     const manager = createManager();
 

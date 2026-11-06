@@ -463,6 +463,31 @@ describe('RpcServer keep-alive', () => {
     }
   });
 
+  it('does not cut a large response when the handler reports progress after it returned', async () => {
+    const socketFile = join(tempDir, 'rpc.sock');
+    const text = 'x'.repeat(4_000_000);
+    const server = new RpcServer(socketFile, {
+      snapshot: (_params, context) => {
+        // The response is on its way when this runs. A byte now would be a
+        // write after the end of the socket, which destroys the socket with
+        // part of the response still unsent.
+        setImmediate(() => {
+          context.keepAlive();
+        });
+        return Promise.resolve({ ...snapshotResult, text });
+      },
+    });
+    await server.listen();
+
+    try {
+      await expect(
+        sendRpc(socketFile, 'snapshot', { format: 'text' }, 20_000),
+      ).resolves.toMatchObject({ format: 'text', text });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('sends only spaces ahead of the response line, so that an older client parses it', async () => {
     const socketFile = join(tempDir, 'rpc.sock');
     const server = new RpcServer(socketFile, {
