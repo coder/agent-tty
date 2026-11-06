@@ -1055,6 +1055,24 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     ).toHaveLength(0);
   });
 
+  it('writes a flush even when its painted-grapheme note fails, and reports the failure', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await page.evaluate('window.__agentTty.resize(80, 24)');
+
+    // A cap of 0 makes the note throw after the chunks are on the screen.
+    const noteError = await page.evaluate(
+      `window.__agentTty.writeBatch(['ab', 'cd'], true, 0)`,
+    );
+
+    expect(noteError).toEqual(
+      expect.stringContaining('cap must be a positive integer'),
+    );
+    expect(
+      await page.evaluate(`window.__agentTty.getVisibleText().split('\\n')[0]`),
+    ).toBe('abcd');
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 

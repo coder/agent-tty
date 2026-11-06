@@ -273,6 +273,44 @@ describe('GhosttyWebBackend unit guards', () => {
     ]);
   });
 
+  it('omits the record export glyph fields, and asks for no more notes, once the page reports a failed note', async () => {
+    const logger = new Logger('debug');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const evaluate = vi.fn(() => Promise.resolve('grapheme read failed'));
+    const page = { isClosed: () => false, evaluate };
+    Object.assign(backend as object, { isBooted: true, page });
+    const flush = (cap: number | null): Promise<void> =>
+      (
+        backend as unknown as {
+          writeBatchBridge: (
+            page: object,
+            dataChunks: string[],
+            endsFlush: boolean,
+            paintedCap: number | null,
+          ) => Promise<void>;
+        }
+      ).writeBatchBridge(page, ['x'], true, cap);
+
+    await expect(flush(MAX_CACHED_GLYPH_PROBES)).resolves.toBeUndefined();
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Missing-glyph note failed; the record export result omits missingGlyphs',
+      'grapheme read failed',
+    );
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({});
+    expect(
+      (
+        backend as unknown as { paintedNoteCap: () => number | null }
+      ).paintedNoteCap(),
+    ).toBeNull();
+  });
+
   it('retries the painted-grapheme note after the backend reboots', async () => {
     const backend = createBackend();
     const graphemes = vi.fn(() => Promise.resolve({ missingGlyphs: [] }));
