@@ -494,6 +494,85 @@ describe('captureGridFrames', () => {
     expect(backend.disposed).toBe(true);
   });
 
+  it.each([
+    {
+      name: 'a visual event',
+      events: [
+        { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(0), type: 'output', payload: { data: 'b' } },
+      ],
+      steppedBackAt: 1,
+    },
+    {
+      name: 'a visual event after a later non-visual event',
+      events: [
+        { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(1_000), type: 'marker', payload: { label: 'm' } },
+        { seq: 2, ts: isoAt(500), type: 'output', payload: { data: 'b' } },
+      ],
+      steppedBackAt: 2,
+    },
+    {
+      name: 'the first of two steps, with events after it',
+      events: [
+        { seq: 0, ts: isoAt(0), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(1_000), type: 'marker', payload: { label: 'm' } },
+        { seq: 2, ts: isoAt(500), type: 'output', payload: { data: 'b' } },
+        { seq: 3, ts: isoAt(2_000), type: 'marker', payload: { label: 'n' } },
+        { seq: 4, ts: isoAt(1_500), type: 'output', payload: { data: 'c' } },
+        { seq: 5, ts: isoAt(3_000), type: 'marker', payload: { label: 'o' } },
+      ],
+      steppedBackAt: 2,
+    },
+    {
+      name: 'the last event',
+      events: [
+        { seq: 0, ts: isoAt(1_000), type: 'output', payload: { data: 'a' } },
+        { seq: 1, ts: isoAt(0), type: 'marker', payload: { label: 'm' } },
+      ],
+      steppedBackAt: 1,
+    },
+  ] satisfies Array<{
+    name: string;
+    events: EventRecord[];
+    steppedBackAt: number;
+  }>)(
+    'captures a still frame when the clock stepped back at $name, and refuses the timeline',
+    async ({ events, steppedBackAt }) => {
+      const lastSeq = events.length - 1;
+      const grids = new Map([[lastSeq, 'ab']]);
+      const capture = await captureGridFrames(
+        {
+          sessionId: SESSION_ID,
+          manifest: createSessionRecord(),
+          events,
+          profile: PROFILE,
+          mode: 'final',
+        },
+        { backendFactory: () => new FakeGridBackend(grids) },
+      );
+      expect(capture.frames).toHaveLength(1);
+      expect(capture.capturedAtSeq).toBe(lastSeq);
+      expect(capture.frames[0]?.holdMs).toBe(1_000);
+
+      await expect(
+        captureGridFrames(
+          {
+            sessionId: SESSION_ID,
+            manifest: createSessionRecord(),
+            events,
+            profile: PROFILE,
+            mode: 'timeline',
+          },
+          { backendFactory: () => new FakeGridBackend(grids) },
+        ),
+      ).rejects.toMatchObject({
+        code: 'EXPORT_ERROR',
+        message: `Animated SVG export needs event timestamps that do not go backward, but the clock stepped back at event ${String(steppedBackAt)}. Use a still SVG export (drop --animate) instead.`,
+      });
+    },
+  );
+
   it('synthesizes a blank frame for an empty event log without a backend', async () => {
     const capture = await captureGridFrames(
       {
