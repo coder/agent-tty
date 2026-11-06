@@ -657,6 +657,52 @@ describe('HostRendererManager replay progress', () => {
     await releaseReplaysUntil(() => finished);
   });
 
+  it('reports the progress that an operation reports to every call that waits, its own too', async () => {
+    const manager = createManager();
+    const gate = createDeferred<undefined>();
+    const aheadProgress = vi.fn();
+    const waitingProgress = vi.fn();
+    const waitingOperation = vi.fn();
+    const heard = { ahead: 0, waiting: 0 };
+
+    // No input: nothing replays, so the only progress is the boot and what
+    // the operation reports (a libghostty-vt screenshot reports each slice of
+    // the replay in its second renderer).
+    const ahead = manager.withBackend(
+      'libghostty-vt',
+      createProfile(),
+      () => null,
+      async (_backend, _replayInput, reportProgress) => {
+        const before = {
+          ahead: aheadProgress.mock.calls.length,
+          waiting: waitingProgress.mock.calls.length,
+        };
+        reportProgress();
+        reportProgress();
+        heard.ahead = aheadProgress.mock.calls.length - before.ahead;
+        heard.waiting = waitingProgress.mock.calls.length - before.waiting;
+        await gate.promise;
+      },
+      aheadProgress,
+    );
+    const waiting = manager.withBackend(
+      'libghostty-vt',
+      createProfile(),
+      () => null,
+      waitingOperation,
+      waitingProgress,
+    );
+    await flushAsyncQueue();
+    await flushAsyncQueue();
+
+    expect(heard).toEqual({ ahead: 2, waiting: 2 });
+    expect(waitingOperation).not.toHaveBeenCalled();
+
+    gate.resolve(undefined);
+    await Promise.all([ahead, waiting]);
+    expect(waitingOperation).toHaveBeenCalledTimes(1);
+  });
+
   it('reports nothing once a replay stops, and a call that finished hears nothing more', async () => {
     const manager = createManager();
     holdReplays = true;

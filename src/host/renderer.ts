@@ -84,6 +84,12 @@ export class HostRendererManager {
    * `onProgress` runs each time a replay moves forward, the replay of this
    * call or of an earlier call that this one waits for. A request passes its
    * `keepAlive`, so that it does not time out while the work it needs goes on.
+   *
+   * `operation` gets `reportProgress` as its third argument. It tells every
+   * call that waits, this one included, that work moves forward, for an
+   * operation that is slow by itself (a libghostty-vt screenshot replays the
+   * log in a second renderer). A call that waits behind the operation hears
+   * of it only this way.
    */
   async withBackend<T>(
     rendererName: RendererName,
@@ -92,6 +98,7 @@ export class HostRendererManager {
     operation: (
       backend: RendererBackend,
       replayInput: ReplayInput | null,
+      reportProgress: () => void,
     ) => T | Promise<T>,
     onProgress?: () => void,
   ): Promise<T> {
@@ -141,7 +148,9 @@ export class HostRendererManager {
         this.cachedInitialRows = replayInput.initialRows;
       }
 
-      return await operation(backend, replayInput);
+      return await operation(backend, replayInput, () => {
+        this.reportProgress();
+      });
     });
     return queued.finally(() => {
       if (listener !== null) {

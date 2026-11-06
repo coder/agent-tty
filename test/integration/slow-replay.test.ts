@@ -156,6 +156,32 @@ describe(
       expect(outcome.elapsedMs).toBeGreaterThan(CLIENT_WAIT_MS);
     });
 
+    it('answers a snapshot that waits behind a libghostty-vt screenshot, which replays the log in a second renderer, for longer than the client waits', async () => {
+      await createSlowSession(PRINT_LINES_COMMAND, {}, PRINTED_LINES);
+
+      const screenshot = runCliAsync(
+        testHome,
+        ['screenshot', sessionId, '--renderer', 'libghostty-vt'],
+        90_000,
+      );
+      // Starts while the screenshot replays the log in its second renderer,
+      // so it waits behind the screenshot in the queue of the host.
+      await sleep(1_000);
+      const snapshot = runCliAsync(
+        testHome,
+        ['snapshot', sessionId, '--renderer', 'libghostty-vt'],
+        90_000,
+      );
+      const [screenshotOutcome, snapshotOutcome] = await Promise.all([
+        screenshot,
+        snapshot,
+      ]);
+
+      expect(screenshotOutcome.code, screenshotOutcome.stdout).toBe(0);
+      expect(snapshotOutcome.code, snapshotOutcome.stdout).toBe(0);
+      expect(snapshotOutcome.elapsedMs).toBeGreaterThan(CLIENT_WAIT_MS);
+    });
+
     it('still ends with HOST_TIMEOUT when the replay stops moving', async () => {
       // The renderer finishes two slices and then stops.
       await createSlowSession(

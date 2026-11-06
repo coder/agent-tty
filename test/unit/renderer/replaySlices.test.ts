@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FIRST_SLICE_EVENTS,
   MAX_SLICE_BYTES,
+  MAX_SLICE_FLUSHES,
   TARGET_SLICE_MS,
   countEventsThrough,
   nextSliceSize,
@@ -50,6 +51,40 @@ function makeInputOf(events: readonly ReplayEvent[]): ReplayInput {
     events: [...events],
     targetSeq: events.length - 1,
   };
+}
+
+type FlushingType = 'input_text' | 'marker' | 'resize';
+
+// An event of a type that makes a renderer flush its output.
+function flushingEvent(type: FlushingType, seq: number): ReplayEvent {
+  const ts = '2026-03-20T12:00:00.000Z';
+  switch (type) {
+    case 'input_text':
+      return { seq, ts, type, payload: { data: 'a' } };
+    case 'marker':
+      return { seq, ts, type, payload: { label: 'm' } };
+    case 'resize':
+      return { seq, ts, type, payload: { cols: 80, rows: 24 } };
+  }
+}
+
+// `pairs` tiny outputs, each followed by an event of the given type.
+function makeOutputInputPairs(
+  type: FlushingType,
+  pairs: number,
+  firstSeq = 0,
+): ReplayEvent[] {
+  return Array.from({ length: 2 * pairs }, (_, index) => {
+    const seq = firstSeq + index;
+    return index % 2 === 0
+      ? {
+          seq,
+          ts: '2026-03-20T12:00:00.000Z',
+          type: 'output' as const,
+          payload: { data: 'x' },
+        }
+      : flushingEvent(type, seq);
+  });
 }
 
 interface Call {
@@ -188,6 +223,49 @@ describe('sliceEnd', () => {
     }
 
     expect(sliceEnd(events, 0, 4, 1_000)).toBe(1);
+  });
+});
+
+describe('sliceEnd with events that follow output', () => {
+  it.each<FlushingType>(['input_text', 'marker', 'resize'])(
+    'ends before the %s that would flush output for more than the limit',
+    (type) => {
+      const events = makeOutputInputPairs(type, 100);
+
+      expect(MAX_SLICE_FLUSHES).toBe(16);
+      // The events at the odd indexes flush: the 16th is event 31. Event 32
+      // is output, and event 33 would be the 17th flush.
+      expect(sliceEnd(events, 0, 200, 1_000)).toBe(33);
+      // The next slice starts with the event 33, which follows no output of
+      // the slice, so it flushes nothing. The flushes are the events 35 to 65,
+      // and event 67 would be the 17th.
+      expect(sliceEnd(events, 33, 200, 1_000)).toBe(67);
+    },
+  );
+
+  it('does not count an event that follows no output, or one that follows another such event', () => {
+    const lone = Array.from({ length: 1_000 }, (_, seq) =>
+      flushingEvent('marker', seq),
+    );
+    const afterOneOutput = [
+      ...makeOutputEvents([1]),
+      ...Array.from({ length: 1_000 }, (_, index) =>
+        flushingEvent('input_text', index + 1),
+      ),
+    ];
+
+    expect(sliceEnd(lone, 0, 1_000, 2_000)).toBe(1_000);
+    // One flush, at the first input.
+    expect(sliceEnd(afterOneOutput, 0, 1_001, 2_000)).toBe(1_001);
+  });
+
+  it('always takes the first event of a slice', () => {
+    const events = makeOutputInputPairs('marker', 100);
+
+    // Each slice holds the event that it starts with, whatever it is.
+    for (let start = 0; start < 200; start += 1) {
+      expect(sliceEnd(events, start, 200, 1_000)).toBeGreaterThan(start);
+    }
   });
 });
 
@@ -433,6 +511,62 @@ describe('replayInSlices', () => {
       );
       const backend = makeBackend({
         costOf: (event) => (event.seq < 500 ? 0 : 5),
+      });
+
+      await replayInSlices(backend, input, -1, () => undefined, backend.now);
+
+      expect(
+        Math.max(...backend.calls.map((call) => call.elapsedMs)),
+      ).toBeLessThan(2 * TARGET_SLICE_MS);
+    });
+  });
+
+  describe('with a limit on the flushes of a slice', () => {
+    // Replay at the speed of #358: a tiny output is cheap, and an event that
+    // follows output flushes it and waits for a frame, which takes 34 ms.
+    const TINY_MS = 0.005;
+    const FLUSH_MS = 34;
+
+    function costOf(event: ReplayEvent): number {
+      return event.type === 'output' ? TINY_MS : FLUSH_MS;
+    }
+
+    it.each<FlushingType>(['input_text', 'marker', 'resize'])(
+      'never makes a call that takes long, after thousands of tiny outputs and then pairs of output and %s',
+      async (type) => {
+        const tiny = makeOutputEvents(Array.from({ length: 30_000 }, () => 1));
+        const input = makeInputOf([
+          ...tiny,
+          ...makeOutputInputPairs(type, 3_000, tiny.length),
+        ]);
+        const backend = makeBackend({ costOf });
+
+        await replayInSlices(backend, input, -1, () => undefined, backend.now);
+
+        // Without the limit, the size has grown to tens of thousands of events
+        // by the time of the pairs, and one slice takes minutes.
+        expect(
+          Math.max(...backend.calls.map((call) => call.elapsedMs)),
+        ).toBeLessThan(2 * TARGET_SLICE_MS);
+        expect(backend.calls.at(-1)?.input).toBe(input);
+        expect(allApplied(backend.calls)).toEqual(
+          input.events.map((event) => event.seq),
+        );
+      },
+    );
+
+    it('never makes a call that takes long, when the pairs come after thousands of cheap events of other types', async () => {
+      // Markers that follow markers flush nothing, so they cost nothing and
+      // make the size grow, as tiny outputs do.
+      const markers = Array.from({ length: 30_000 }, (_, seq) =>
+        flushingEvent('marker', seq),
+      );
+      const input = makeInputOf([
+        ...markers,
+        ...makeOutputInputPairs('input_text', 3_000, markers.length),
+      ]);
+      const backend = makeBackend({
+        costOf: (event) => (event.seq < markers.length ? 0 : costOf(event)),
       });
 
       await replayInSlices(backend, input, -1, () => undefined, backend.now);

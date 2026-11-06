@@ -23,6 +23,13 @@ export const TARGET_SLICE_MS = 500;
 // So a slice also holds at most this many bytes of output. One event that is
 // larger than this makes a slice alone.
 export const MAX_SLICE_BYTES = 1024 * 1024;
+// Output waits in a batch that a renderer writes at once. An input, a marker,
+// a resize or any other event that follows output makes the renderer write the
+// batch first and wait for a frame, which takes about 34 ms. Tiny outputs cost
+// almost nothing, so the size grows over them, and thousands of such pairs
+// after them would then run for minutes in silence. So a slice also holds at
+// most this many of these flushes. At 34 ms, it stays near the target time.
+export const MAX_SLICE_FLUSHES = 16;
 // A slice may grow or shrink by this factor at most, so one cheap or costly
 // stretch of the log does not make the next slice far too long.
 const MAX_SLICE_SCALE = 4;
@@ -58,7 +65,8 @@ function outputBytes(event: ReplayEvent): number {
 /**
  * The index after the last event of the slice that starts at `start`, at most
  * `end`. The slice holds at most `maxEvents` events, and after its first event
- * at most `MAX_SLICE_BYTES` of output.
+ * at most `MAX_SLICE_BYTES` of output and `MAX_SLICE_FLUSHES` events that
+ * follow output (the replay of the slice flushes its output at each of them).
  */
 export function sliceEnd(
   events: readonly ReplayEvent[],
@@ -72,12 +80,23 @@ export function sliceEnd(
   );
   const limit = Math.min(end, start + maxEvents);
   let bytes = 0;
+  let flushes = 0;
+  let outputPending = false;
   let index = start;
   while (index < limit) {
     const event = events[index];
     invariant(event !== undefined, 'replay event must exist');
     bytes += outputBytes(event);
-    if (index > start && bytes > MAX_SLICE_BYTES) {
+    if (event.type === 'output') {
+      outputPending = true;
+    } else if (outputPending) {
+      outputPending = false;
+      flushes += 1;
+    }
+    if (
+      index > start &&
+      (bytes > MAX_SLICE_BYTES || flushes > MAX_SLICE_FLUSHES)
+    ) {
       break;
     }
     index += 1;

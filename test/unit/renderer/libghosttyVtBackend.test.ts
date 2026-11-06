@@ -677,6 +677,7 @@ describe('LibghosttyVtBackend', () => {
     // The fallback replays as a real backend does: it holds a position and
     // ends at the last event that it replays.
     const steps: string[] = [];
+    const replayedSeqs: number[] = [];
     let lastSeq = -1;
     const bootMock = vi.fn((): Promise<void> => {
       steps.push('boot');
@@ -685,6 +686,7 @@ describe('LibghosttyVtBackend', () => {
     const replayToMock = vi.fn((input: ReplayInput): Promise<ReplayState> => {
       steps.push('replay');
       for (const event of iterateInRangeReplayEvents(input, lastSeq)) {
+        replayedSeqs.push(event.seq);
         lastSeq = event.seq;
       }
       return Promise.resolve({
@@ -743,6 +745,8 @@ describe('LibghosttyVtBackend', () => {
     expect(
       inputs.slice(0, -1).every((input) => input.events.length < 300),
     ).toBe(true);
+    // The fallback is cold, so it gets every event once, the first one too.
+    expect(replayedSeqs).toEqual(Array.from({ length: 300 }, (_, seq) => seq));
     expect(lastSeq).toBe(299);
     expect(fallback.disposeMock).toHaveBeenCalledTimes(1);
   });

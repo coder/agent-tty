@@ -718,14 +718,16 @@ export async function runHost(
         rendererName,
         profile,
         () => loadReplayInput(),
-        async (backend) =>
+        async (backend, _replayInput, reportProgress) =>
           await captureScreenshotResult({
             backend,
             sessionDir: sessDir,
             profileName: profile.name,
             expectedSessionId: sessionId,
             ...(showCursor === undefined ? {} : { showCursor }),
-            onReplayProgress: context.keepAlive,
+            // Not `context.keepAlive`: a command that waits behind this
+            // screenshot in the renderer queue must hear of the progress too.
+            onReplayProgress: reportProgress,
           }),
         context.keepAlive,
       );

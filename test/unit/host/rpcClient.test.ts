@@ -270,6 +270,117 @@ describe('sendRpc response cap', () => {
   );
 });
 
+describe('sendRpc response cap with keep-alives', () => {
+  const MAX_CHARS = 67_108_864;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'agent-tty-rpc-client-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = '';
+  });
+
+  // A host that writes `keepAlives` spaces and then a success response line of
+  // `lineChars` characters, newline included. `sent.resultChars` is the length
+  // of the result in that line, once the host has seen the request.
+  async function listen(
+    keepAlives: number,
+    lineChars: number,
+    sameWrite: boolean,
+  ): Promise<{ server: net.Server; sent: { resultChars: number } }> {
+    const sent = { resultChars: 0 };
+    const server = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', (request: Buffer) => {
+        const { id } = JSON.parse(request.toString('utf8')) as { id: string };
+        const head = `{"id":${JSON.stringify(id)},"ok":true,"result":"`;
+        const tail = '"}\n';
+        sent.resultChars = lineChars - head.length - tail.length;
+        const line = `${head}${'x'.repeat(sent.resultChars)}${tail}`;
+        const spaces = ' '.repeat(keepAlives);
+        void (async () => {
+          if (sameWrite) {
+            socket.end(spaces + line);
+            return;
+          }
+          for (const space of spaces) {
+            socket.write(space);
+            await setTimeout(20);
+          }
+          socket.end(line);
+        })();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(join(tempDir, 'rpc.sock'), () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    return { server, sent };
+  }
+
+  async function close(server: net.Server): Promise<void> {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  }
+
+  it.each([
+    { name: 'in chunks of their own', sameWrite: false },
+    { name: 'in the same write as the response', sameWrite: true },
+  ])(
+    'takes a response of exactly 64 MiB after keep-alives that come $name',
+    { timeout: 30_000 },
+    async ({ sameWrite }) => {
+      // The host checks the response line alone, and the line is at its cap.
+      const { server, sent } = await listen(3, MAX_CHARS, sameWrite);
+      try {
+        const result = await sendRpc(
+          join(tempDir, 'rpc.sock'),
+          'ping',
+          {},
+          20_000,
+        );
+
+        expect(sent.resultChars).toBeGreaterThan(MAX_CHARS - 1_000);
+        expect(result).toHaveLength(sent.resultChars);
+      } finally {
+        await close(server);
+      }
+    },
+  );
+
+  it(
+    'refuses a response one character over 64 MiB after keep-alives',
+    { timeout: 30_000 },
+    async () => {
+      const { server } = await listen(3, MAX_CHARS + 1, false);
+      try {
+        const error = await sendRpc(
+          join(tempDir, 'rpc.sock'),
+          'ping',
+          {},
+          20_000,
+        ).catch((rejection: unknown) => rejection);
+
+        expect(error).toMatchObject({
+          code: 'PROTOCOL_ERROR',
+          retryable: false,
+          details: { method: 'ping', maxResponseChars: MAX_CHARS },
+        });
+      } finally {
+        await close(server);
+      }
+    },
+  );
+});
+
 describe.skipIf(process.platform === 'win32')(
   'sendRpc to a host that an older version started',
   () => {
