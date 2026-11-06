@@ -242,6 +242,14 @@ function deriveNextSeq(records: readonly EventRecord[]): number {
   return lastRecord.seq + 1;
 }
 
+/** True for the marker that `recordStop` writes when the log stops. */
+function isStopMarker(record: EventRecord): boolean {
+  return (
+    record.type === 'marker' &&
+    record.payload.label.startsWith(EVENT_LOG_LIMIT_LABEL_PREFIX)
+  );
+}
+
 /**
  * Returns the event log file size in bytes, or `undefined` when the file
  * does not exist (ENOENT). Non-ENOENT errors propagate to the caller.
@@ -305,9 +313,6 @@ export class EventLog {
   // append anyway.
   private fileBytes: number;
 
-  // Set once the log has stopped taking records. See `queueAppend`.
-  private stopped = false;
-
   private constructor(
     filePath: string,
     private readonly fileHandle: FileHandle,
@@ -316,6 +321,9 @@ export class EventLog {
     private readonly maxBytes: number,
     private readonly maxEntries: number,
     eventBuffer: EventRecord[] = [],
+    // Set once the log has stopped taking records. See `queueAppend`. A log
+    // that holds its stop marker starts stopped.
+    private stopped = false,
     private isClosed = false,
   ) {
     invariant(filePath.length > 0, 'filePath must be a non-empty string');
@@ -372,6 +380,20 @@ export class EventLog {
         invariant(nextSeq >= 0, 'derived next seq must be non-negative');
       }
 
+      // A file of blank lines holds no record. When its size is already inside
+      // the tail reserve, the stop marker may not fit, and a dropped append
+      // would have no earlier record whose `seq` it could report. This host
+      // never writes such a file, so refuse it instead of starting a log that
+      // could not stop.
+      if (
+        eventBuffer.length === 0 &&
+        fileStats.size > maxBytes - EVENT_LOG_TAIL_RESERVE_BYTES
+      ) {
+        throw new Error(
+          `event log ${filePath} holds no record, and its ${String(fileStats.size)} bytes leave less than ${String(EVENT_LOG_TAIL_RESERVE_BYTES)} bytes free under the ${String(maxBytes)}-byte limit`,
+        );
+      }
+
       return new EventLog(
         filePath,
         fileHandle,
@@ -380,6 +402,7 @@ export class EventLog {
         maxBytes,
         maxEntries,
         eventBuffer,
+        eventBuffer.some(isStopMarker),
       );
     } catch (error) {
       await fileHandle.close();
