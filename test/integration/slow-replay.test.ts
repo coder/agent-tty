@@ -73,33 +73,32 @@ describe(
       testHome = '';
     });
 
+    // A session whose host replays with the slow-replay fixture and has
+    // printed the lines, one event for each line.
     async function createSlowSession(
+      command: string[],
       env: Record<string, string>,
+      printedEvents: number,
     ): Promise<void> {
       const preload = pathToFileURL(resolve('test/fixtures/slow-replay.ts'));
-      sessionId = createSession(
-        testHome,
-        [
-          '/bin/sh',
-          '-c',
-          `i=0; while [ $i -lt ${String(PRINTED_LINES)} ]; do echo line-$i; i=$((i+1)); sleep 0.02; done; exec cat`,
-        ],
-        {
-          env: {
-            NODE_OPTIONS: [
-              process.env.NODE_OPTIONS ?? '',
-              `--import=${preload.href}`,
-            ].join(' '),
-            AGENT_TTY_TEST_REPLAY_MS_PER_EVENT: String(REPLAY_MS_PER_EVENT),
-            ...env,
-          },
+      sessionId = createSession(testHome, command, {
+        env: {
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            `--import=${preload.href}`,
+          ].join(' '),
+          AGENT_TTY_TEST_REPLAY_MS_PER_EVENT: String(REPLAY_MS_PER_EVENT),
+          ...env,
         },
-      );
-      // One event for each line, 20 ms apart, so each is its own event.
-      const deadline = Date.now() + 30_000;
+      });
+      await waitForEvents(printedEvents);
+    }
+
+    async function waitForEvents(count: number): Promise<void> {
+      const deadline = Date.now() + 60_000;
       while (Date.now() < deadline) {
         const events = await readEvents(testHome, sessionId).catch(() => []);
-        if (events.length >= PRINTED_LINES) {
+        if (events.length >= count) {
           return;
         }
         await sleep(250);
@@ -107,8 +106,15 @@ describe(
       throw new Error('timed out waiting for the printed lines');
     }
 
+    // Prints a line every 20 ms, so that each line is its own event.
+    const PRINT_LINES_COMMAND = [
+      '/bin/sh',
+      '-c',
+      `i=0; while [ $i -lt ${String(PRINTED_LINES)} ]; do echo line-$i; i=$((i+1)); sleep 0.02; done; exec cat`,
+    ];
+
     it('answers a screenshot, and a snapshot that waits behind it, while the replay goes on for longer than the client waits', async () => {
-      await createSlowSession({});
+      await createSlowSession(PRINT_LINES_COMMAND, {}, PRINTED_LINES);
 
       const screenshot = runCliAsync(
         testHome,
@@ -135,7 +141,11 @@ describe(
 
     it('still ends with HOST_TIMEOUT when the replay stops moving', async () => {
       // The renderer finishes two slices and then stops.
-      await createSlowSession({ AGENT_TTY_TEST_REPLAY_STALL_AFTER_CALLS: '2' });
+      await createSlowSession(
+        PRINT_LINES_COMMAND,
+        { AGENT_TTY_TEST_REPLAY_STALL_AFTER_CALLS: '2' },
+        PRINTED_LINES,
+      );
 
       const outcome = await runCliAsync(
         testHome,
@@ -150,6 +160,47 @@ describe(
       });
       // It waited for the slices, then for 5 s without a byte.
       expect(outcome.elapsedMs).toBeGreaterThan(CLIENT_WAIT_MS);
+    });
+
+    it('answers a run whose catch-up replay goes on for longer than the client waits', async () => {
+      // The host default renderer is ghostty-web, so that the catch-up replay
+      // after the run uses the slow backend.
+      await createSlowSession(
+        ['/bin/bash'],
+        {
+          AGENT_TTY_RENDERER: 'ghostty-web',
+          AGENT_TTY_TEST_REPLAY_MS_PER_EVENT: '100',
+          HISTFILE: '/dev/null',
+        },
+        1,
+      );
+      const printed = await runCliAsync(
+        testHome,
+        [
+          'run',
+          sessionId,
+          `for i in $(seq 1 ${String(PRINTED_LINES)}); do echo line-$i; sleep 0.02; done`,
+          '--no-wait',
+        ],
+        30_000,
+      );
+      expect(printed.code, printed.stdout).toBe(0);
+      await waitForEvents(PRINTED_LINES);
+
+      // The command ends at once. The client waits 3 s for it and 10 s more
+      // for the host, and the catch-up replay takes 20 s or more.
+      const outcome = await runCliAsync(
+        testHome,
+        ['run', sessionId, 'true', '--timeout', '3000'],
+        90_000,
+      );
+
+      expect(outcome.code, outcome.stdout).toBe(0);
+      expect(JSON.parse(outcome.stdout)).toMatchObject({
+        ok: true,
+        result: { completed: true },
+      });
+      expect(outcome.elapsedMs).toBeGreaterThan(13_000);
     });
   },
 );
