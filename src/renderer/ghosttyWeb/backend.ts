@@ -140,11 +140,11 @@ const MAX_REPLAY_BATCH_SIZE = 1000;
 /**
  * A max-speed replay flushes at most about this many times, however long the
  * recording is. A flush costs one animation frame, one page call and one scan
- * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 97 ms at 200x60 in the
- * median of the sparse-log runs of PR 358 (host load 60 to 90). The limit then
- * takes 1 to 4 minutes, under the 5 minutes that a WebM export allows its
- * replay. The video has 25 frames per second, so a viewer cannot tell more
- * than this many states apart in a video of that length.
+ * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 112 ms at 200x60 in the
+ * median of five sparse-log runs (host load 40 to 100). The limit then takes
+ * 1 to 4.5 minutes, under the 5 minutes that a WebM export allows its replay.
+ * The video has 25 frames per second, so a viewer cannot tell more than this
+ * many states apart in a video of that length.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
