@@ -1,5 +1,5 @@
 import type { RendererBackend } from './backend.js';
-import type { ReplayInput, ReplayState } from './types.js';
+import type { ReplayEvent, ReplayInput, ReplayState } from './types.js';
 import { invariant } from '../util/assert.js';
 
 // A replay of a long log can take minutes, and a caller sees nothing of it
@@ -17,6 +17,12 @@ import { invariant } from '../util/assert.js';
 // 21 ms per event that ghostty-web once took, it is 0.7 s.
 export const FIRST_SLICE_EVENTS = 32;
 export const TARGET_SLICE_MS = 500;
+// A count of events does not bound the time of a slice when the speed depends
+// on the bytes that a slice writes. After thousands of tiny events, the size
+// has grown, and 500 events of 64 KB would then run for seconds in silence.
+// So a slice also holds at most this many bytes of output. One event that is
+// larger than this makes a slice alone.
+export const MAX_SLICE_BYTES = 1024 * 1024;
 // A slice may grow or shrink by this factor at most, so one cheap or costly
 // stretch of the log does not make the next slice far too long.
 const MAX_SLICE_SCALE = 4;
@@ -43,6 +49,40 @@ export function countEventsThrough(
     }
   }
   return low;
+}
+
+function outputBytes(event: ReplayEvent): number {
+  return event.type === 'output' ? Buffer.byteLength(event.payload.data) : 0;
+}
+
+/**
+ * The index after the last event of the slice that starts at `start`, at most
+ * `end`. The slice holds at most `maxEvents` events, and after its first event
+ * at most `MAX_SLICE_BYTES` of output.
+ */
+export function sliceEnd(
+  events: readonly ReplayEvent[],
+  start: number,
+  end: number,
+  maxEvents: number,
+): number {
+  invariant(
+    Number.isInteger(maxEvents) && maxEvents > 0,
+    'slice event limit must be a positive integer',
+  );
+  const limit = Math.min(end, start + maxEvents);
+  let bytes = 0;
+  let index = start;
+  while (index < limit) {
+    const event = events[index];
+    invariant(event !== undefined, 'replay event must exist');
+    bytes += outputBytes(event);
+    if (index > start && bytes > MAX_SLICE_BYTES) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
 }
 
 export function nextSliceSize(size: number, elapsedMs: number): number {
@@ -80,29 +120,37 @@ export async function replayInSlices(
   const end = countEventsThrough(events, input.targetSeq);
   let next = countEventsThrough(events, appliedSeq);
   let size = FIRST_SLICE_EVENTS;
+  let stop = sliceEnd(events, next, end, size);
 
-  while (end - next > size) {
+  // The rest fits in one slice when `stop` reaches `end`.
+  while (stop < end) {
     const startedAt = now();
     // The slice keeps the target of the whole replay. A lower target would
     // fail on a backend that is ahead of `appliedSeq`, which cannot rewind.
     // The backend ends at the last event that it replays, not at the target.
     const state = await backend.replayTo({
       ...input,
-      events: events.slice(next, next + size),
+      events: events.slice(next, stop),
     });
     onReplayed(state);
     const reached = countEventsThrough(events, state.lastSeq);
     invariant(
-      reached >= next + size && reached <= end,
+      reached >= stop && reached <= end,
       'a replay slice must end at its last event or at the backend position',
     );
+    // Only a slice that the count of events ended says how many events take
+    // the target time. The byte limit ended the others, and they hold events
+    // of a different cost.
+    if (stop - next === size) {
+      size = nextSliceSize(size, now() - startedAt);
+    }
     // The backend can be ahead of `appliedSeq`, so take its own position.
     next = reached;
-    size = nextSliceSize(size, now() - startedAt);
+    stop = sliceEnd(events, next, end, size);
   }
 
   // The last call gets the whole input: a backend keeps its last input (the
   // libghostty-vt screenshot replays it in a second renderer), and it skips
-  // the events it already holds.
+  // the events it already holds. The events that are left fit in one slice.
   onReplayed(await backend.replayTo(input));
 }
