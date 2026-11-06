@@ -39,7 +39,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ./scripts/copy-renderer-assets.mjs",
-    "clean": "rimraf coverage dist .tsconfig.tsbuildinfo .tsconfig.build.tsbuildinfo",
+    "clean": "node -e \"for (const p of ['coverage', 'dist', '.tsconfig.tsbuildinfo', '.tsconfig.build.tsbuildinfo']) require('node:fs').rmSync(p, { recursive: true, force: true })\"",
     "cli": "tsx src/cli/main.ts",
     "doctor": "tsx src/cli/main.ts doctor",
     "format": "oxfmt . --write",
@@ -71,7 +71,6 @@
     "oxlint": "1.62.0",
     "oxlint-tsgolint": "0.22.1",
     "release-please": "17.9.0",
-    "rimraf": "6.1.4",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
     "vitest": "4.1.12"
@@ -99,18 +98,18 @@
       "@parcel/watcher"
     ],
     "overrides": {
-      "@xmldom/xmldom": "0.8.15",
-      "brace-expansion": "5.0.12",
-      "esbuild": "0.28.1",
-      "handlebars": "4.7.10",
-      "js-yaml": "4.3.2",
-      "minimatch": "11.0.4",
-      "nanoid": "3.3.18",
-      "postcss": "8.5.32",
-      "source-map-js": "1.2.2",
-      "tinypool": "2.1.2",
-      "vite": "8.1.6",
-      "ws": "8.21.0"
+      "@xmldom/xmldom": "^0.8.15",
+      "brace-expansion": "^5.0.12",
+      "esbuild": "^0.28.1",
+      "handlebars": "^4.7.10",
+      "js-yaml": "^4.3.2",
+      "minimatch": "^11.0.3",
+      "nanoid": "^3.3.18",
+      "postcss": "^8.5.32",
+      "source-map-js": "^1.2.2",
+      "tinypool": "^2.1.2",
+      "vite": "^8.1.6",
+      "ws": "^8.21.0"
     }
   }
 }
