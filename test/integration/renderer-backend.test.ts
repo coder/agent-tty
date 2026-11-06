@@ -894,21 +894,35 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
           await new Promise((resolve) => setTimeout(resolve, 100));
         },
       });
-      // Wait for the first frame, so that it is the screen before the replay.
+      // Wait until the screen before the replay is quiet: a slow host can
+      // deliver a late paint of the first screen, which is not a frame of the
+      // replay. The screen before the replay counts as one frame.
+      let framesSeen = 0;
+      let quietSinceMs = Date.now();
       await expect
-        .poll(() => frames.length, { timeout: 10_000 })
-        .toBeGreaterThan(0);
+        .poll(
+          () => {
+            if (frames.length !== framesSeen) {
+              framesSeen = frames.length;
+              quietSinceMs = Date.now();
+            }
+            return framesSeen > 0 && Date.now() - quietSinceMs >= 300;
+          },
+          { timeout: 10_000 },
+        )
+        .toBe(true);
+      const framesBefore = frames.length;
       await replay(backend, input);
       // The last colour must reach the listener. Then wait a little more, so
       // that a frame between two calls would have arrived too.
       await expect
         .poll(() => frames.length, { timeout: 10_000 })
-        .toBeGreaterThan(1);
+        .toBeGreaterThan(framesBefore);
       await new Promise((resolve) => setTimeout(resolve, 500));
       await screencast.send('Page.stopScreencast');
 
-      // The frame before the replay, then the frame of the last colour.
-      expect(frames).toHaveLength(2);
+      // The screen before the replay, then the frame of the last colour.
+      expect(frames).toHaveLength(framesBefore + 1);
     },
   );
 
