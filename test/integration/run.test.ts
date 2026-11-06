@@ -507,13 +507,9 @@ describe('run command integration', { timeout: 45_000 }, () => {
   );
 
   it('does not log postamble cursor controls when shell echo is disabled', async () => {
-    sessionId = createSession(
-      testHome,
-      ['/bin/bash', '--noprofile', '--norc'],
-      {
-        cols: WIDE_ARTIFACT_PROOF_COLS,
-      },
-    );
+    sessionId = createBashSession(testHome, {
+      cols: WIDE_ARTIFACT_PROOF_COLS,
+    });
     await sleep(1000);
 
     const disableEchoResult = runCli(
