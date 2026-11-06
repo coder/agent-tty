@@ -6,8 +6,9 @@ const HOLD_OPEN_MS = 1_200;
 // By default the fixture exits HOLD_OPEN_MS after its output. `wait --idle-ms`
 // refuses a session whose program has exited (SESSION_NOT_RUNNING), so a test
 // that needs a running session cannot race that exit. With
-// --wait-input-before-exit the fixture stays open until it reads any stdin
-// byte, which a test can leave unsent and let `destroy` end the session.
+// --wait-input-before-exit the fixture stays open until stdin delivers input.
+// The PTY is in line mode, so that takes a full line (for example `Enter`). A
+// test can send none and let `destroy` end the session.
 const waitForInput = process.argv.includes('--wait-input-before-exit');
 
 const basicBackgrounds = [40, 41, 42, 43, 44, 45, 46, 47] as const;
