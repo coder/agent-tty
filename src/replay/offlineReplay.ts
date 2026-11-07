@@ -8,6 +8,7 @@ import {
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 import type { RendererBackend } from '../renderer/backend.js';
+import { GhosttyWebCrashedError } from '../renderer/ghosttyWeb/index.js';
 import {
   DEFAULT_RENDERER_NAME,
   resolveRendererName,
@@ -179,7 +180,9 @@ export async function withOfflineReplayRenderer<T>(
       await backend.replayTo(replayInput);
     } catch (error) {
       throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
-        message: `Failed to boot or replay renderer for session ${sessionId}.`,
+        message: `Failed to boot or replay renderer for session ${sessionId}.${
+          error instanceof GhosttyWebCrashedError ? ` ${error.message}` : ''
+        }`,
         cause: error,
       });
     }

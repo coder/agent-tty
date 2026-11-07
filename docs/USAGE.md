@@ -259,7 +259,7 @@ The Wait Baseline fixes stale-match only. It does **not** fix echo-match: a whol
 
 ## Screenshots And Recording Exports
 
-Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium.
+Screenshots and WebM export use the `ghostty-web` reference visual renderer through Playwright/Chromium. When its page crashes during a replay, the error message says `ghostty-web crashed` and names a known cause (see [Troubleshooting](TROUBLESHOOTING.md#a-command-says-ghostty-web-crashed)).
 Semantic `snapshot`, screen-hash, and render-backed `wait` paths prefer `libghostty-vt` when the optional native package is available and fall back to `ghostty-web` otherwise. Run `doctor --json` first in new environments.
 
 On a session that has printed nothing yet, `snapshot` returns an empty screen of the session's size and `screenshot` returns a blank image. `record export` gives a header-only asciicast, a blank WebM or a blank SVG of the session's size, with `durationMs: 0`. An animated SVG of such a session reports `durationMs: 1000`, the hold of its one blank frame. All of them report `capturedAtSeq: -1`, and the default files are named `screenshot--1-<profile>.png`, `recording--1-<format>.<ext>` and `recording--1-svg-<profile>[-animated].svg`.

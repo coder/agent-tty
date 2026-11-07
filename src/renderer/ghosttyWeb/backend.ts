@@ -46,6 +46,7 @@ import type {
 import { BUNDLED_FONT_ASSETS } from '../bundledFont.js';
 import { hashProfile } from '../profiles.js';
 import { iterateInRangeReplayEvents } from '../replayEvents.js';
+import { describeReplayFailure } from './crashError.js';
 import {
   assertHexColor,
   assertNonNegativeInteger,
@@ -385,6 +386,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   }
 
   public async replayTo(input: ReplayInput): Promise<ReplayState> {
+    try {
+      return await this.replayToInner(input);
+    } catch (error) {
+      throw describeReplayFailure(error);
+    }
+  }
+
+  private async replayToInner(input: ReplayInput): Promise<ReplayState> {
     const page = this.requireOperationalPage('replayTo()');
 
     invariant(
@@ -506,6 +515,17 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   }
 
   public async replayWithTiming(
+    input: ReplayInput,
+    timing: ReplayTimingOptions,
+  ): Promise<ReplayState> {
+    try {
+      return await this.replayWithTimingInner(input, timing);
+    } catch (error) {
+      throw describeReplayFailure(error);
+    }
+  }
+
+  private async replayWithTimingInner(
     input: ReplayInput,
     timing: ReplayTimingOptions,
   ): Promise<ReplayState> {

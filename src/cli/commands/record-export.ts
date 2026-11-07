@@ -16,6 +16,7 @@ import {
   type WebmExportResult,
 } from '../../export/webm.js';
 import { captureGridFrames } from '../../replay/gridFrames.js';
+import { GhosttyWebCrashedError } from '../../renderer/ghosttyWeb/index.js';
 import {
   EventLogTooLargeError,
   readEventLogRecords,
@@ -597,7 +598,9 @@ export async function runRecordExportCommand(
     }
 
     throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-      message: `Failed to export session "${options.sessionId}" as ${format}.`,
+      message: `Failed to export session "${options.sessionId}" as ${format}.${
+        error instanceof GhosttyWebCrashedError ? ` ${error.message}` : ''
+      }`,
       details: {
         sessionId: options.sessionId,
         format,

@@ -44,6 +44,19 @@ Check `doctor --json` for:
 
 If the browser-backed checks fail in CI or a container, install Chromium during setup and make sure the cache is readable by the process running `agent-tty`. If `libghostty_vt_available` is skipped or unavailable and no renderer is explicitly configured, semantic commands should fall back to `ghostty-web`; use `--renderer ghostty-web` to make that choice explicit. If you have `AGENT_TTY_RENDERER=libghostty-vt` or Home `config.json` sets `defaultRenderer` to `libghostty-vt`, clear that explicit configuration or override it with `ghostty-web` on machines without the optional native package.
 
+## A Command Says `ghostty-web crashed`
+
+The error message says `ghostty-web crashed while it replayed this session's output.` The Chromium page of the `ghostty-web` renderer died while it replayed the event log. A live `screenshot` or `snapshot --renderer ghostty-web` fails with `RPC_ERROR` (exit `9`). On an exited session the same commands fail with `REPLAY_ERROR` (exit `10`), and `record export --format webm` fails with `EXPORT_ERROR` (exit `7`). The message ends with the Playwright text, `(page.evaluate: Target crashed)`.
+
+One known cause is a bug in ghostty-web 0.4.0. After a full reset (`ESC c`), `CSI ? 47 h` and `CSI ? 1047 h` show the old cells on the alternate screen. Output over a cell that holds a combining mark or another grapheme cluster then crashes the page. The shortest input has 12 bytes: `a`, U+0301, `ESC c`, `ESC [ ? 4 7 h` and `o`. `CSI ? 1049 h` is not affected.
+
+Running the command again does not help, because each run replays the same log and the page crashes again. The session itself keeps running, and the host stays up. These commands do not use the page, so they still work on such a session:
+
+- `snapshot` and `wait` with the `libghostty-vt` renderer, which is the default when its native package is available
+- `record export --format svg` and `record export --format asciicast`
+
+`screenshot` and `record export --format webm` have no replacement until ghostty-web has a fix.
+
 ## Isolated Homes
 
 Use `--home <path>` for automation, tests, CI, and agent workflows:
