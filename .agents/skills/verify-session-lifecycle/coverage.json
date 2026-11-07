@@ -45,7 +45,7 @@
   },
   "fingerprints": {
     "src/cli/commands/create.ts#runCreateCommand": "4b419acb46ce6a32",
-    "src/cli/commands/create.ts#waitForReadyHost": "94630a2141b32dc4",
+    "src/cli/commands/create.ts#waitForReadyHost": "c73abcc0002fb1f3",
     "src/cli/commands/create.ts#writeMarkerOrLog": "abf293bd80df1c3d",
     "src/cli/commands/create.ts#hostRuns": "b80eac3bb9523aaf",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
@@ -149,7 +149,7 @@
     "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "9d2f5e19d5de78d2",
+    "skill:model/SessionLifecycle.tla": "d5bc54e9007eee55",
     "skill:scripts/facts.mjs": "2646e5666654796b",
     "skill:scripts/check.sh": "5cf0c5286124ebeb"
   },

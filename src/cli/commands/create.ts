@@ -28,14 +28,16 @@ import {
   socketPath,
 } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
+import { hasErrorCode } from '../../util/hasErrorCode.js';
 
 const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_RPC_TIMEOUT_MS = 100;
 // Create waits for a host process that runs for as long as it needs to start.
 // This limit is only for a host that runs and never answers, for example one
-// that a signal stopped. It stays inside the host's create-failed watch of
-// 60 s (CREATE_FAILED_WATCH_MAX_MS in hostMain.ts), so the host still sees the
-// marker of a create that gives up at this limit.
+// that a signal stopped. It stays inside the host's create-failed watch
+// (CREATE_FAILED_WATCH_MAX_MS, 60 s), so the host still sees the marker of a
+// create that gives up at this limit. The unit test `ends before the host stops
+// watching for its create-failed marker` pins that.
 const READINESS_DEADLINE_MS = 30_000;
 const MARKER_RETRY_INTERVAL_MS = 100;
 const MARKER_RETRY_MAX_ATTEMPTS = 50;
@@ -134,6 +136,17 @@ async function readCreateResult(
   return toCreateResult(manifest);
 }
 
+// sendRpc maps only ECONNREFUSED, ENOENT and ECONNRESET to HOST_UNREACHABLE.
+// It reports EPIPE as RPC_ERROR. The probe gets it when the host closes its
+// server as the probe connects and writes, as a host does whose program has
+// already exited. Like an unreachable host, it says nothing about the
+// session, so the host and the manifest decide.
+function isClosedByHost(error: CliError): boolean {
+  return (
+    error.code === ERROR_CODES.RPC_ERROR && hasErrorCode(error.cause, 'EPIPE')
+  );
+}
+
 // A host that runs can still start, and a start-up on a loaded machine takes as
 // long as the machine needs. So create keeps asking while the host process
 // that it spawned runs. It gives up as soon as that process has exited, since
@@ -153,7 +166,8 @@ async function waitForReadyHost(
       if (
         !(error instanceof CliError) ||
         (error.code !== ERROR_CODES.HOST_UNREACHABLE &&
-          error.code !== ERROR_CODES.HOST_TIMEOUT)
+          error.code !== ERROR_CODES.HOST_TIMEOUT &&
+          !isClosedByHost(error))
       ) {
         throw error;
       }
