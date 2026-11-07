@@ -113,6 +113,39 @@ describe.skipIf(process.platform === 'win32')(
       ).toBe(0);
     });
 
+    // The race itself (a host that closes its server while the probe
+    // connects) is not deterministic, so the fixture fails the first probe
+    // with the error that sendRpc reports for it.
+    it('asks again after the first readiness probe gets EPIPE', async () => {
+      const flag = join(testHome, 'epipe-fired');
+
+      const result = runCli(
+        ['create', '--json', '--', '/bin/sh', '-c', 'exec cat'],
+        {
+          AGENT_TTY_HOME: testHome,
+          AGENT_TTY_TEST_EPIPE_FLAG: flag,
+          NODE_OPTIONS: [
+            process.env.NODE_OPTIONS ?? '',
+            preload('fail-first-probe-with-epipe.ts'),
+          ].join(' '),
+        },
+        90_000,
+      );
+
+      expect(existsSync(flag)).toBe(true);
+      expect(result.status).toBe(0);
+      const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+        sessionId: string;
+      }>;
+      expect(envelope.ok).toBe(true);
+      const sessionId = envelope.result.sessionId;
+      expect(inspectSession(testHome, sessionId).status).toBe('running');
+      expect(
+        runCli(['destroy', sessionId, '--json'], { AGENT_TTY_HOME: testHome })
+          .status,
+      ).toBe(0);
+    });
+
     it('gives up on a host that runs and never listens, and tells it to stop', async () => {
       // The clock runs 10 times as fast, so the 30 s deadline passes in 3 s.
       const result = createWithSlowHost(

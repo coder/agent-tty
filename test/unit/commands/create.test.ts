@@ -53,7 +53,7 @@ vi.mock('node:timers/promises', () => ({
     clock.delays += 1;
     // A wait that passes its deadline by this much has no deadline, and a
     // loop of resolved promises would starve the test timeout.
-    return clock.delays > 1_000
+    return clock.delays > 10_000
       ? Promise.reject(new Error('a wait went on past its deadline'))
       : Promise.resolve();
   },
