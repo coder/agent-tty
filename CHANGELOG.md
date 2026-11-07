@@ -2,6 +2,69 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-07
+
+### Added
+
+- `record diff <a> <b>` offline command computes an LCS line diff between two sessions (or one session at two seqs) with structured `{ identical, a, b, diff }` JSON output and a unified human-mode view ([#170](https://github.com/coder/agent-tty/pull/170)). `--at-seq-a`/`--at-seq-b` now accept `-1` for an empty event log ([#300](https://github.com/coder/agent-tty/pull/300)).
+- `record export --format svg [--animate]` writes browserless, byte-deterministic SVGs with embedded JetBrains Mono and optional symbol/math font subsets; still exports hold the final frame, animated exports use SMIL with recorded event timing ([#171](https://github.com/coder/agent-tty/pull/171)). A clock that stepped backward now fails only the animated form with a clear `EXPORT_ERROR` ([#349](https://github.com/coder/agent-tty/pull/349)).
+- `mouse` CLI/RPC command and batch step for mode-aware native mouse input (press, release, drag, wheel) through the libghostty-vt backend, with `mouse-input` capability detection and `CAPABILITY_UNAVAILABLE` (exit 12) when the native package is missing ([#179](https://github.com/coder/agent-tty/pull/179)).
+- `wait --scope cursor-line` matches `--text`/`--regex` only against the cursor row, so prompt waits like `--regex 'READY> $' --scope cursor-line` cannot be fooled by the echoed command line ([#169](https://github.com/coder/agent-tty/pull/169)).
+- `screenshot --out <path>` writes the PNG to a chosen path, matching `record export --out` semantics ([#241](https://github.com/coder/agent-tty/pull/241)). Both commands now create missing parent folders like `mkdir -p` while still refusing any path inside the Home's `sessions/` folder ([#279](https://github.com/coder/agent-tty/pull/279), [#290](https://github.com/coder/agent-tty/pull/290)).
+- `screenshot --json` reports `missingGlyphs` and `missingGlyphsTruncated` for codepoints that render as `.notdef` boxes, judged per-face and across the full built-in font stack ([#240](https://github.com/coder/agent-tty/pull/240), [#278](https://github.com/coder/agent-tty/pull/278)). `record export --format webm` reports the same fields for painted frames ([#278](https://github.com/coder/agent-tty/pull/278)).
+- Bundled Noto Sans Symbols 2 and Noto Sans Math subsets extend the built-in font stack by ~4761 codepoints without overriding host color emoji; built-in render profile hash changes accordingly ([#278](https://github.com/coder/agent-tty/pull/278)).
+- `inspect` reports `eventLogStop: { reason, seq }` and `WAIT_TIMEOUT`/`REPLAY_ERROR` messages name the stop (`byte limit`, `event limit`, or `reason unknown`) when the event log hit its size limit ([#357](https://github.com/coder/agent-tty/pull/357)).
+- Spawned processes now see `AGENT_TTY_ACTIVE=true` and `AGENT_TTY_SESSION_ID=<id>` in their environment ([#166](https://github.com/coder/agent-tty/pull/166)). Session-less PTYs (e.g. `doctor`'s probe) strip inherited values instead of leaking them ([#178](https://github.com/coder/agent-tty/pull/178)).
+- PTY answers XTGETTCAP (`Tc`, `RGB`, `setrgbf`, `setrgbb`) and declines DECRQSS SGR, so Neovim detects truecolor even under `env -i` ([#271](https://github.com/coder/agent-tty/pull/271)). `COLORTERM=truecolor` is set by default in every session, overridable via `--env` ([#231](https://github.com/coder/agent-tty/pull/231)).
+
+### Changed
+
+- **Build: migrated from aube to pnpm** (`pnpm@10.34.5`), so Dependabot updates work again. Package resolutions are byte-identical; `mise run bootstrap` now runs `pnpm install && pnpm exec playwright install chromium` ([#176](https://github.com/coder/agent-tty/pull/176)).
+- `wait` without `--timeout` now defaults to 30 s (down from 600 s) and `wait --help` shows the default; `--timeout 0` still waits without a limit ([#236](https://github.com/coder/agent-tty/pull/236)). Batch `wait` steps default to the same 30 s ([#250](https://github.com/coder/agent-tty/pull/250)).
+- Timed-out waits return a `WAIT_TIMEOUT` error envelope with `ok: false`, `error.code: WAIT_TIMEOUT`, and the wait result carried under `result`; exit code stays 11 ([#232](https://github.com/coder/agent-tty/pull/232)). Human-mode messages name the effective timeout ([#273](https://github.com/coder/agent-tty/pull/273)). A render wait that keeps failing stops with the renderer's own error instead of reporting `WAIT_TIMEOUT` ([#301](https://github.com/coder/agent-tty/pull/301)).
+- `wait` rejects a `--screen-stable-ms` or `--idle-ms` window that cannot finish within the effective timeout with `INVALID_DURATION` at parse time, instead of waiting out the timeout ([#277](https://github.com/coder/agent-tty/pull/277)).
+- Per-session RPC sockets live under `/tmp/agent-tty-<uid>/` with a verified `0700` root, so another user cannot squat on the Home socket folder. CLIs from older versions fall back to the legacy path for one release ([#288](https://github.com/coder/agent-tty/pull/288)).
+- RPC responses are accepted up to 64 MiB (success paths), lifting the cap on `snapshot --include-cells` for large grids; oversize successes report `PROTOCOL_ERROR` instead of `RPC_ERROR` ([#320](https://github.com/coder/agent-tty/pull/320), [#322](https://github.com/coder/agent-tty/pull/322)). Live snapshot RPC timeout extended to 60 s to match replay cost at large sizes.
+- Live `snapshot`/`screenshot` replay the event log in bounded slices and send periodic keep-alive bytes, so large logs no longer trip the 5 s socket inactivity timeout ([#359](https://github.com/coder/agent-tty/pull/359)).
+- Captures at the same seq keep earlier artifact files via `link`-based publication with `-<n>` suffixes when bytes differ, so a failed repeat capture can no longer delete the earlier file ([#191](https://github.com/coder/agent-tty/pull/191)).
+- `record export --format webm` paces output using a schedule built from recorded gaps, so bursts no longer play back as a single late frame ([#285](https://github.com/coder/agent-tty/pull/285)).
+- Empty event logs are a valid state: `snapshot`, `screenshot`, render `wait`, asciicast and WebM exports all return `capturedAtSeq: -1` with the expected blank output instead of failing ([#235](https://github.com/coder/agent-tty/pull/235), [#270](https://github.com/coder/agent-tty/pull/270)).
+
+### Fixed
+
+- Session lifecycle hardened across `create`, `destroy`, `reconcile` and `gc`, closing races that could corrupt sessions when multiple agents shared one Home ([#181](https://github.com/coder/agent-tty/pull/181), [#200](https://github.com/coder/agent-tty/pull/200), [#201](https://github.com/coder/agent-tty/pull/201), [#216](https://github.com/coder/agent-tty/pull/216), [#239](https://github.com/coder/agent-tty/pull/239), [#302](https://github.com/coder/agent-tty/pull/302), [#303](https://github.com/coder/agent-tty/pull/303)).
+- `create` now stops its host (and names the session in every error envelope via `error.details.sessionId`) when any readiness-wait error fires, writes a `create-failed` marker the host watches for, and waits for a slow host as long as that host process lives (up to a 30 s hard deadline on the monotonic clock) ([#247](https://github.com/coder/agent-tty/pull/247), [#294](https://github.com/coder/agent-tty/pull/294), [#312](https://github.com/coder/agent-tty/pull/312), [#324](https://github.com/coder/agent-tty/pull/324), [#362](https://github.com/coder/agent-tty/pull/362)).
+- `destroy` now stops the program's full process group with SIGKILL after a 2 s grace, forwards SIGINT/SIGTERM to its re-run copy (exits 130/143), finds in-shell destroys off-Linux by controlling terminal, and `destroy --force` ends sessions whose program group is unreadable (EACCES, EIO, etc.) ([#201](https://github.com/coder/agent-tty/pull/201), [#216](https://github.com/coder/agent-tty/pull/216), [#246](https://github.com/coder/agent-tty/pull/246), [#281](https://github.com/coder/agent-tty/pull/281), [#327](https://github.com/coder/agent-tty/pull/327)).
+- `gc` keeps a session whose program group still runs (new skip reason names `destroy`) and removes it only when agent-tty can prove the group dead, including fork-chain and zombie-only scans ([#302](https://github.com/coder/agent-tty/pull/302), [#326](https://github.com/coder/agent-tty/pull/326)).
+- Event log stops at its 50 MB / 250 000-entry limits and writes one `marker` record naming the cause, so hosts no longer crash on oversized logs; later commands name the stop in their error messages ([#340](https://github.com/coder/agent-tty/pull/340), [#357](https://github.com/coder/agent-tty/pull/357)).
+- Artifact manifest writes are serialized through a per-session lock file, so concurrent captures no longer drop entries ([#282](https://github.com/coder/agent-tty/pull/282)). A failed `screenshot --out` copy now rolls back its in-session entry, and `record export` identifies its temp file so repeat writes to one path keep the latest entry's bytes ([#300](https://github.com/coder/agent-tty/pull/300), [#321](https://github.com/coder/agent-tty/pull/321)).
+- `--out` writes re-check the parent folder's device and inode just before the rename, refuse parents without search permission, and name the swapped folder in the `EXPORT_ERROR` ([#279](https://github.com/coder/agent-tty/pull/279)).
+- Screenshots now actually honor `--show-cursor`/`--hide-cursor` (previous behavior drew the cursor regardless) ([#289](https://github.com/coder/agent-tty/pull/289)).
+- `screenshot --json` of a session that printed nothing no longer draws a block cursor at (0,0) ([#235](https://github.com/coder/agent-tty/pull/235), [#289](https://github.com/coder/agent-tty/pull/289)).
+- Mouse same-cell motion stays deduplicated after program output and after renderer swaps; waited `run` input is now logged in PTY order ([#234](https://github.com/coder/agent-tty/pull/234), [#293](https://github.com/coder/agent-tty/pull/293)). Depends on bumping `@coder/libghostty-vt-node` to 0.1.0-beta.7, which also moves the linux-x64 prebuild to the x86-64 baseline (pre-beta.5 required AVX-512).
+- `--json` always emits exactly one envelope on stdout: unexpected errors become `INTERNAL_ERROR` (and exit immediately once flushed), Commander usage errors emit `INVALID_INPUT`, invalid session IDs return `INVALID_SESSION_ID` across 17 commands, and config read/parse errors are typed as `STORAGE_READ_ERROR`/`INVALID_INPUT` ([#237](https://github.com/coder/agent-tty/pull/237), [#287](https://github.com/coder/agent-tty/pull/287)).
+- CLI warns on stderr when running on an unsupported Node (checked against `engines.node`), and `doctor` reports the full `>=24.0.0 <27` range ([#245](https://github.com/coder/agent-tty/pull/245)).
+- Host RPC errors now carry `CliError.details` across the wire (bounded to serializable, < 65 536 chars), and oversized error responses truncate the message with `[message truncated]` instead of crashing the host ([#313](https://github.com/coder/agent-tty/pull/313), [#315](https://github.com/coder/agent-tty/pull/315), [#319](https://github.com/coder/agent-tty/pull/319)).
+- Home registry read drops only invalid entries instead of discarding every Home when one entry is corrupt ([#186](https://github.com/coder/agent-tty/pull/186)).
+- First `create` in a Home behind a symlink no longer fails: CLI and host now canonicalize the path the same way before it exists ([#210](https://github.com/coder/agent-tty/pull/210)).
+- `_host` tool hardening: bundle validation rejects canonical symlink escapes and hero-demo promotion leak-checks before writing ([#187](https://github.com/coder/agent-tty/pull/187)).
+- Many smaller host and storage fixes around socket cleanup, destroy timing, shutdown races, Windows late-host handling, and APFS EINVAL mapping to `SESSION_NOT_FOUND`.
+
+### Breaking Changes
+
+- `agent-tty wait` default timeout changed from 600 s to 30 s. Scripts that relied on the old default must pass `--timeout <ms>` or `--timeout 0`. Batch `wait` steps default to 30 s likewise ([#236](https://github.com/coder/agent-tty/pull/236), [#250](https://github.com/coder/agent-tty/pull/250)).
+- Timed-out `wait` JSON envelope: `ok` is now `false` with `error.code: "WAIT_TIMEOUT"`. The wait result is still present under `result` (preserving `.result.timedOut`, `.result.matched`, `.result.capturedAtSeq`). Exit code remains 11 ([#232](https://github.com/coder/agent-tty/pull/232)).
+- Per-session sockets moved to `/tmp/agent-tty-<uid>/`. Running hosts started by 0.5.0 remain reachable via a one-release legacy-path fallback; destroy sessions before downgrading ([#288](https://github.com/coder/agent-tty/pull/288)).
+- `screenshot`/`record export --out` into a path inside the Home's `sessions/` folder is now refused with `EXPORT_ERROR` ([#241](https://github.com/coder/agent-tty/pull/241)).
+- `capturedAtSeq` can now be `-1` across snapshot, screenshot, wait, record export, record diff, batch results and the artifact manifest. Clients that asserted `capturedAtSeq >= 0` must accept `-1` ([#235](https://github.com/coder/agent-tty/pull/235), [#270](https://github.com/coder/agent-tty/pull/270)).
+- Built-in render profile hash changed because Noto Sans Symbols 2 and Noto Sans Math joined the default font stack. Byte-identical PNG comparisons against prior releases will differ for any screen containing covered glyphs ([#278](https://github.com/coder/agent-tty/pull/278)).
+- Inherited `COLORTERM` from the outer shell no longer reaches sessions; use `--env COLORTERM=<value>` to override ([#231](https://github.com/coder/agent-tty/pull/231)).
+
+### New Contributors
+
+* @prmartinow made their first contribution in [#166](https://github.com/coder/agent-tty/pull/166)
+* @pmarreck made their first contribution in [#179](https://github.com/coder/agent-tty/pull/179)
+
 ## [0.5.0] - 2026-06-23
 
 ### Added
