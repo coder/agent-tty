@@ -2409,9 +2409,8 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     // pid. Holding that write keeps create's manifest, with no childPid, for
     // the whole destroy. The hold matches the host's argv only, so the inner
     // CLI, which inherits it, runs at full speed. A held host never answers
-    // create, which gives up after about 5 s and sends it SIGTERM. On a slow
-    // runner that came before the inner destroy, so create is killed once it
-    // has written the manifest, which the host still reads after its creator
+    // create, which waits for it. The test kills create once it has written
+    // the manifest. The host still reads that manifest after its creator
     // died, and the destroy kills the held host.
     it('destroy --force before the host names the program prints its result', async () => {
       const out = join(testHome, 'early-destroy.json');

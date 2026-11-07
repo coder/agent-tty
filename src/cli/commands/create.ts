@@ -31,11 +31,11 @@ import { invariant } from '../../util/assert.js';
 
 const READINESS_POLL_INTERVAL_MS = 100;
 const READINESS_RPC_TIMEOUT_MS = 100;
-// Create waits for a host that runs for as long as it takes. This limit is
-// only for a host that runs and never listens, for example one that a signal
-// stopped. It is well inside the host's create-failed watch of 60 s
-// (CREATE_FAILED_WATCH_MAX_MS), so the host still sees the marker of a create
-// that gives up at this limit.
+// Create waits for a host process that runs for as long as it needs to start.
+// This limit is only for a host that runs and never answers, for example one
+// that a signal stopped. It stays inside the host's create-failed watch of
+// 60 s (CREATE_FAILED_WATCH_MAX_MS in hostMain.ts), so the host still sees the
+// marker of a create that gives up at this limit.
 const READINESS_DEADLINE_MS = 30_000;
 const MARKER_RETRY_INTERVAL_MS = 100;
 const MARKER_RETRY_MAX_ATTEMPTS = 50;
