@@ -51,6 +51,10 @@ import {
 
 const zombieLeader = resolve('test/fixtures/zombie-leader.py');
 const forkChain = resolve('test/fixtures/fork-chain.py');
+// A create waits up to 30 s for a host that runs and never listens. With the
+// monotonic clock 5 times as fast (test/fixtures/fast-clock.ts), a create
+// that waits for a held host gives up after about 6 s.
+const CREATE_DEADLINE_CLOCK_FACTOR = '5';
 
 function groupStates(group: number): string[] {
   return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
@@ -2053,9 +2057,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
             REPLAY_LOG: holdLog,
             REPLAY_RELEASE: release,
             REPLAY_HOLD: '_host:rename:/session.json:1:60000',
+            AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
               ...preloads,
             ].join(' '),
           },
@@ -2138,9 +2144,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           REPLAY_LOG: holdLog,
           REPLAY_RELEASE: release,
           REPLAY_HOLD: '_host:open:/events.jsonl:1:60000',
+          AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
           NODE_OPTIONS: [
             process.env.NODE_OPTIONS ?? '',
             `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+            `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
             `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
           ].join(' '),
         },
@@ -2226,9 +2234,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
             REPLAY_LOG: holdLog,
             REPLAY_RELEASE: release,
             REPLAY_HOLD: `_host:mkdir:/${socketDirectory}:1:60000`,
+            AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/fail-manifest-read-after-marker.ts')).href}`,
