@@ -108,7 +108,8 @@ const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
 const CREATE_FAILED_POLL_INTERVAL_MS = 100;
 // A create ends well within this time after its host's start-up check: its
-// readiness wait and its marker retries take about 20 s at most.
+// readiness wait ends at 30 s (READINESS_DEADLINE_MS in create.ts) and its
+// marker retries take about 5 s at most.
 const CREATE_FAILED_WATCH_MAX_MS = 60_000;
 // How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
