@@ -11,7 +11,7 @@ import type { SessionRecord } from '../../../src/protocol/schemas.js';
 // The readiness wait ends at a deadline on the monotonic clock. The mocked
 // delay moves a fake clock by the time it stands for, so a host that never
 // answers reaches that deadline at once.
-const clock = vi.hoisted(() => ({ nowMs: 0 }));
+const clock = vi.hoisted(() => ({ nowMs: 0, delays: 0 }));
 
 const mocks = vi.hoisted(() => ({
   emitSuccess: vi.fn(),
@@ -49,7 +49,12 @@ vi.mock('../../../src/host/socketRoot.js', () => ({
 vi.mock('node:timers/promises', () => ({
   setTimeout: (ms: number) => {
     clock.nowMs += ms;
-    return Promise.resolve();
+    clock.delays += 1;
+    // A wait that passes its deadline by this much has no deadline, and a
+    // loop of resolved promises would starve the test timeout.
+    return clock.delays > 1_000
+      ? Promise.reject(new Error('a wait went on past its deadline'))
+      : Promise.resolve();
   },
 }));
 
@@ -126,6 +131,7 @@ describe('create command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clock.nowMs = 0;
+    clock.delays = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => clock.nowMs);
     mocks.allocateSession.mockImplementation(
       (_config: unknown, launch: (sessionId: string) => number) => {
@@ -332,13 +338,15 @@ describe('create command', () => {
   it('waits for a host that starts later than 10 s', async () => {
     // 150 polls of 100 ms are 15 s, three times the 50 attempts that gave up
     // on a slow host before.
-    for (let attempt = 0; attempt < 150; attempt += 1) {
-      mocks.sendRpc.mockRejectedValueOnce(
-        makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
-          message: 'host unreachable',
-        }),
-      );
-    }
+    mocks.sendRpc.mockImplementation(() =>
+      mocks.sendRpc.mock.calls.length <= 150
+        ? Promise.reject(
+            makeCliError(ERROR_CODES.HOST_UNREACHABLE, {
+              message: 'host unreachable',
+            }),
+          )
+        : Promise.resolve({ session: { sessionId: 'session-01' } }),
+    );
 
     await runCreateCommand({ ...baseOptions, context });
 
