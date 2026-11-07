@@ -12,6 +12,7 @@ if (!process.argv.includes('_host')) {
   if (flag === undefined || flag.length === 0) {
     throw new Error('AGENT_TTY_TEST_EPIPE_FLAG must name a file');
   }
+  // oxlint-disable-next-line typescript/unbound-method -- the patch below calls it with write.apply(this, args).
   const write = net.Socket.prototype.write as (
     this: net.Socket,
     ...args: unknown[]

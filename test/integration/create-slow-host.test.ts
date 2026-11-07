@@ -116,7 +116,7 @@ describe.skipIf(process.platform === 'win32')(
     // The race itself (a host that closes its server while the probe
     // connects) is not deterministic, so the fixture fails the first probe
     // with the error that sendRpc reports for it.
-    it('asks again after the first readiness probe gets EPIPE', async () => {
+    it('asks again after the first readiness probe gets EPIPE', () => {
       const flag = join(testHome, 'epipe-fired');
 
       const result = runCli(
