@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReplayTimingOptions } from '../../../src/renderer/backend.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
+import { MAX_CACHED_GLYPH_PROBES } from '../../../src/renderer/ghosttyWeb/missingGlyphs.js';
 import { hashProfile, resolveProfile } from '../../../src/renderer/profiles.js';
 import { GhosttyWebBackend } from '../../../src/renderer/ghosttyWeb/index.js';
 import { Logger } from '../../../src/util/logger.js';
@@ -88,7 +89,7 @@ describe('GhosttyWebBackend unit guards', () => {
     expect(recordedChunks).toEqual(chunks);
   });
 
-  it('notes painted graphemes after each bridge batch of a split flush', async () => {
+  it('runs the after-batch hook after each bridge call of a split flush', async () => {
     const backend = createBackend();
     const calls: string[] = [];
     (
@@ -113,29 +114,111 @@ describe('GhosttyWebBackend unit guards', () => {
         ) => Promise<void>;
       }
     ).flushOutputBatch({}, chunks, () => {
-      calls.push('note');
+      calls.push('hook');
       return Promise.resolve();
     });
 
     expect(calls).toEqual([
       'write 1000',
-      'note',
+      'hook',
       'write 1000',
-      'note',
+      'hook',
       'write 501',
-      'note',
+      'hook',
     ]);
   });
 
-  it('notes painted graphemes after each output flush of a timed replay', async () => {
+  // The page holds the chunks of the calls before the one that failed.
+  // HostRendererManager keeps the backend after a failed replay, so a retry
+  // would meet them.
+  describe.each([
+    [
+      'a page call',
+      (calls: number) => (calls === 2 ? new Error('page call failed') : null),
+      undefined,
+    ],
+    [
+      'the hook between two calls',
+      () => null,
+      () => Promise.reject(new Error('page call failed')),
+    ],
+  ])('when %s of a flush fails', (_name, failure, afterEachBatch) => {
+    function failFlush(discard: () => unknown): {
+      rejection: Promise<void>;
+      evaluate: ReturnType<typeof vi.fn>;
+    } {
+      const backend = createBackend();
+      vi.stubGlobal('__agentTty', { discardHeldChunks: discard });
+      const evaluate = vi.fn((pageFunction: () => unknown) =>
+        Promise.resolve(pageFunction()),
+      );
+      let calls = 0;
+      (
+        backend as unknown as {
+          writeBatchBridge: () => Promise<void>;
+        }
+      ).writeBatchBridge = () => {
+        calls += 1;
+        const error = failure(calls);
+        return error === null ? Promise.resolve() : Promise.reject(error);
+      };
+      const rejection = (
+        backend as unknown as {
+          flushOutputBatch: (
+            page: object,
+            dataChunks: string[],
+            afterEachBatch?: () => Promise<void>,
+          ) => Promise<void>;
+        }
+      ).flushOutputBatch(
+        { evaluate },
+        Array.from({ length: 2_501 }, () => 'x'),
+        afterEachBatch,
+      );
+      return { rejection, evaluate };
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('drops the held chunks and rejects with the original error', async () => {
+      const discard = vi.fn();
+      const { rejection } = failFlush(discard);
+
+      await expect(rejection).rejects.toThrow('page call failed');
+      expect(discard).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects with the original error when the page cannot drop the chunks either', async () => {
+      const { rejection, evaluate } = failFlush(() => {
+        throw new Error('page crashed');
+      });
+
+      await expect(rejection).rejects.toThrow('page call failed');
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // A separate page call costs a round trip behind a frame, 5 to 60 ms
+  // depending on the terminal size, so the page notes the graphemes inside the
+  // call that ends the flush.
+  it('notes painted graphemes in the page call that ends each output flush of a timed replay', async () => {
     const backend = createBackend();
     const calls: string[] = [];
     Object.assign(backend as object, {
       isBooted: true,
       page: { isClosed: () => false },
       resizeBridge: () => Promise.resolve(),
-      writeBatchBridge: (_page: object, dataChunks: string[]) => {
-        calls.push(`write ${dataChunks.join(',')}`);
+      writeBatchBridge: (
+        _page: object,
+        dataChunks: string[],
+        endsFlush: boolean,
+        paintedCap: number | null,
+      ) => {
+        calls.push(
+          `write ${dataChunks.join(',')} ${String(endsFlush)} ${String(paintedCap)}`,
+        );
         return Promise.resolve();
       },
       notePaintedGraphemes: () => {
@@ -184,7 +267,48 @@ describe('GhosttyWebBackend unit guards', () => {
       { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
     );
 
-    expect(calls).toEqual(['write first', 'note', 'write second', 'note']);
+    expect(calls).toEqual([
+      `write first true ${String(MAX_CACHED_GLYPH_PROBES)}`,
+      `write second true ${String(MAX_CACHED_GLYPH_PROBES)}`,
+    ]);
+  });
+
+  it('omits the record export glyph fields, and asks for no more notes, once the page reports a failed note', async () => {
+    const logger = new Logger('debug');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const backend = new GhosttyWebBackend(
+      'renderer-unit-session',
+      PROFILE,
+      undefined,
+      logger,
+    );
+    const evaluate = vi.fn(() => Promise.resolve('grapheme read failed'));
+    const page = { isClosed: () => false, evaluate };
+    Object.assign(backend as object, { isBooted: true, page });
+    const flush = (cap: number | null): Promise<void> =>
+      (
+        backend as unknown as {
+          writeBatchBridge: (
+            page: object,
+            dataChunks: string[],
+            endsFlush: boolean,
+            paintedCap: number | null,
+          ) => Promise<void>;
+        }
+      ).writeBatchBridge(page, ['x'], true, cap);
+
+    await expect(flush(MAX_CACHED_GLYPH_PROBES)).resolves.toBeUndefined();
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Missing-glyph note failed; the record export result omits missingGlyphs',
+      'grapheme read failed',
+    );
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({});
+    expect(
+      (
+        backend as unknown as { paintedNoteCap: () => number | null }
+      ).paintedNoteCap(),
+    ).toBeNull();
   });
 
   it('retries the painted-grapheme note after the backend reboots', async () => {
@@ -424,6 +548,224 @@ describe('GhosttyWebBackend unit guards', () => {
       'writeBatchBridge batch size must not exceed MAX_REPLAY_BATCH_SIZE',
     );
     expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  // The page waits one animation frame (about 17 ms) after each bridge write.
+  // A bridge call that writes its chunks one by one makes a replay cost one
+  // frame per output event, so these tests run the page function of every
+  // call against a counting bridge.
+  async function withCountingBridge<T>(
+    run: (context: {
+      page: { isClosed: () => boolean; evaluate: ReturnType<typeof vi.fn> };
+      write: ReturnType<typeof vi.fn>;
+      writeBatchSizes: number[];
+      frameWaits: boolean[];
+      paintedCaps: (number | null)[];
+      writtenChunks: string[];
+    }) => Promise<T>,
+  ): Promise<T> {
+    const writeBatchSizes: number[] = [];
+    const frameWaits: boolean[] = [];
+    const paintedCaps: (number | null)[] = [];
+    const writtenChunks: string[] = [];
+    const write = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('__agentTty', {
+      write,
+      writeBatch: (
+        chunks: string[],
+        waitForFrame: boolean,
+        paintedCap: number | null,
+      ) => {
+        writeBatchSizes.push(chunks.length);
+        frameWaits.push(waitForFrame);
+        paintedCaps.push(paintedCap);
+        writtenChunks.push(...chunks);
+        return Promise.resolve(null);
+      },
+    });
+    const page = {
+      isClosed: () => false,
+      evaluate: vi.fn((pageFunction: (arg: unknown) => unknown, arg: unknown) =>
+        Promise.resolve(pageFunction(arg)),
+      ),
+    };
+
+    try {
+      return await run({
+        page,
+        write,
+        writeBatchSizes,
+        frameWaits,
+        paintedCaps,
+        writtenChunks,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  function outputReplayInput(eventCount: number): ReplayInput {
+    return {
+      sessionId: 'renderer-unit-session',
+      initialCols: 80,
+      initialRows: 24,
+      targetSeq: eventCount - 1,
+      events: Array.from({ length: eventCount }, (_, seq) => ({
+        seq,
+        ts: '2026-03-19T12:00:00.000Z',
+        type: 'output' as const,
+        payload: { data: `chunk-${String(seq)}` },
+      })),
+    };
+  }
+
+  it('writes a bridge batch into the page in one call that ends its flush', async () => {
+    const backend = createBackend();
+    const chunks = Array.from({ length: 1000 }, (_, i) => `chunk-${String(i)}`);
+
+    await withCountingBridge(
+      async ({ page, write, writeBatchSizes, frameWaits, writtenChunks }) => {
+        await (
+          backend as unknown as {
+            writeBatchBridge: (
+              page: object,
+              dataChunks: string[],
+            ) => Promise<void>;
+          }
+        ).writeBatchBridge(page, chunks);
+
+        expect(page.evaluate).toHaveBeenCalledTimes(1);
+        expect(writeBatchSizes).toEqual([1000]);
+        expect(frameWaits).toEqual([true]);
+        expect(writtenChunks).toEqual(chunks);
+        expect(write).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  // Only a recorded replay probes glyphs, and it notes the painted graphemes
+  // in the call that ends the flush: no call of its own, and none in a call
+  // that only holds chunks.
+  it.each([
+    [
+      'replayTo',
+      (backend: GhosttyWebBackend, input: ReplayInput) =>
+        backend.replayTo(input),
+      [null, null, null],
+    ],
+    [
+      'replayWithTiming',
+      (backend: GhosttyWebBackend, input: ReplayInput) =>
+        backend.replayWithTiming(input, {
+          mode: 'max-speed',
+          minFrameHoldMs: 0,
+          finalFrameHoldMs: 0,
+        }),
+      [null, null, MAX_CACHED_GLYPH_PROBES],
+    ],
+  ])(
+    '%s calls the page once per 1000 output events, and ends the flush with the last call',
+    async (_name, replay, expectedPaintedCaps) => {
+      const backend = createBackend();
+      const input = outputReplayInput(2_501);
+
+      await withCountingBridge(
+        async ({
+          page,
+          write,
+          writeBatchSizes,
+          frameWaits,
+          paintedCaps,
+          writtenChunks,
+        }) => {
+          Object.assign(backend as object, {
+            isBooted: true,
+            page,
+            resizeBridge: () => Promise.resolve(),
+            checkPaintedGlyphs: () => Promise.resolve({}),
+            readHarnessSnapshot: () =>
+              Promise.resolve(createHarnessSnapshotPayload({ cols: 80 })),
+          });
+
+          await replay(backend, input);
+
+          expect(page.evaluate).toHaveBeenCalledTimes(3);
+          expect(writeBatchSizes).toEqual([1000, 1000, 501]);
+          expect(frameWaits).toEqual([false, false, true]);
+          expect(paintedCaps).toEqual(expectedPaintedCaps);
+          expect(writtenChunks).toEqual(
+            input.events.map((event) =>
+              event.type === 'output' ? event.payload.data : '',
+            ),
+          );
+          expect(write).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
+
+  // A bridge call holds at most 1000 chunks. The page writes a flush when the
+  // call that ends it arrives, so the flag must be true on exactly one call of
+  // a flush, the last: also when the chunk count is a multiple of 1000.
+  it.each([
+    [1, [true]],
+    [999, [true]],
+    [1_000, [true]],
+    [1_001, [false, true]],
+    [1_999, [false, true]],
+    [2_000, [false, true]],
+    [2_001, [false, false, true]],
+  ])(
+    'ends a flush of %i output chunks with its last bridge call only',
+    async (chunkCount, expectedEnds) => {
+      const backend = createBackend();
+
+      await withCountingBridge(
+        async ({ page, writeBatchSizes, frameWaits }) => {
+          Object.assign(backend as object, {
+            isBooted: true,
+            page,
+            resizeBridge: () => Promise.resolve(),
+            readHarnessSnapshot: () =>
+              Promise.resolve(createHarnessSnapshotPayload({ cols: 80 })),
+          });
+
+          await backend.replayTo(outputReplayInput(chunkCount));
+
+          expect(frameWaits).toEqual(expectedEnds);
+          expect(writeBatchSizes.reduce((sum, size) => sum + size, 0)).toBe(
+            chunkCount,
+          );
+        },
+      );
+    },
+  );
+
+  it('ends the flush before a marker, so the next flush starts holding again', async () => {
+    const backend = createBackend();
+    const input = outputReplayInput(3_001);
+    input.events[1_500] = {
+      seq: 1_500,
+      ts: '2026-03-19T12:00:00.000Z',
+      type: 'marker',
+      payload: { label: 'boundary' },
+    };
+
+    await withCountingBridge(async ({ page, writeBatchSizes, frameWaits }) => {
+      Object.assign(backend as object, {
+        isBooted: true,
+        page,
+        resizeBridge: () => Promise.resolve(),
+        readHarnessSnapshot: () =>
+          Promise.resolve(createHarnessSnapshotPayload({ cols: 80 })),
+      });
+
+      await backend.replayTo(input);
+
+      // 1500 chunks, the marker, then 1500 chunks.
+      expect(writeBatchSizes).toEqual([1_000, 500, 1_000, 500]);
+      expect(frameWaits).toEqual([false, true, false, true]);
+    });
   });
 
   it('includes structured cell data only when snapshot includeCells is requested', async () => {
@@ -1115,17 +1457,38 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     };
   }
 
+  function inputEvent(
+    seq: number,
+    offsetMs: number,
+  ): ReplayInput['events'][number] {
+    return {
+      seq,
+      ts: new Date(BASE_TIMESTAMP_MS + offsetMs).toISOString(),
+      type: 'input_text',
+      payload: { data: 'x' },
+    };
+  }
+
   async function replayAndRecordFlushes(
     events: ReplayInput['events'],
     timing: ReplayTimingOptions,
     flushCostMs = 0,
     onFlush: () => void = () => {},
+    // Seq that an earlier replay applied: the backend starts after it.
+    appliedSeq = -1,
   ): Promise<{ atMs: number; chunks: string[] }[]> {
     vi.useFakeTimers();
     const backend = createBackend();
     const flushes: { atMs: number; chunks: string[] }[] = [];
     let replayStartedAtMs = 0;
 
+    if (appliedSeq >= 0) {
+      Object.assign(backend as object, {
+        lastAppliedSeq: appliedSeq,
+        initialReplayCols: 80,
+        initialReplayRows: 24,
+      });
+    }
     Object.assign(backend as object, {
       isBooted: true,
       page: { isClosed: () => false },
@@ -1266,15 +1629,181 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ]);
   });
 
-  it('keeps max-speed outputs in one flush so frame holds cannot outlast the export timeout', async () => {
+  it('flushes max-speed output every frame hold of recorded time, so each moment gets a frame', async () => {
     const flushes = await replayAndRecordFlushes(
-      [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 400)],
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 5),
+        outputEvent(2, 10),
+        outputEvent(3, 16),
+        outputEvent(4, 20),
+        outputEvent(5, 40),
+        outputEvent(6, 41),
+        exitEvent(7, 500),
+      ],
       MAX_SPEED,
     );
 
-    expect(flushes).toEqual([
-      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0', 'out1', 'out2'] },
+    expect(flushes.map((flush) => flush.chunks)).toEqual([
+      ['out0', 'out1', 'out2'],
+      ['out3', 'out4'],
+      ['out5', 'out6'],
     ]);
+  });
+
+  it('keeps one max-speed flush per moment when the outputs are far apart', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 200),
+        outputEvent(2, 400),
+        exitEvent(3, 600),
+      ],
+      MAX_SPEED,
+    );
+
+    expect(flushes.map((flush) => flush.chunks)).toEqual([
+      ['out0'],
+      ['out1'],
+      ['out2'],
+    ]);
+  });
+
+  // The frame wait of a flush is the frame of its moment. A hold after every
+  // flush would make each 30 ms step cost 44 ms to export.
+  it('holds max-speed frames only after the last flush of the replay', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 20),
+        outputEvent(2, 40),
+        exitEvent(3, 50),
+        outputEvent(4, 80),
+      ],
+      MAX_SPEED,
+    );
+
+    // Every flush starts when the next event arrives, so no hold follows one.
+    expect(flushes).toEqual([
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out0'] },
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out1'] },
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out2'] },
+      { atMs: FIRST_EVENT_AT_MS, chunks: ['out4'] },
+    ]);
+  });
+
+  // A flush at every input, marker or exit event would cost one frame for each
+  // of them, and a recording of typing has an input for every output.
+  it('does not end a max-speed flush at an event that changes no pixel', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        inputEvent(1, 5),
+        outputEvent(2, 10),
+        exitEvent(3, 500),
+      ],
+      MAX_SPEED,
+    );
+
+    expect(flushes.map((flush) => flush.chunks)).toEqual([['out0', 'out2']]);
+  });
+
+  it('still ends a recorded flush at an event that changes no pixel', async () => {
+    const flushes = await replayAndRecordFlushes(
+      [
+        outputEvent(0, 0),
+        inputEvent(1, 5),
+        outputEvent(2, 10),
+        exitEvent(3, 500),
+      ],
+      RECORDED,
+    );
+
+    expect(flushes.map((flush) => flush.chunks)).toEqual([['out0'], ['out2']]);
+  });
+
+  // 10,000 outputs with an input between each pair, 40 ms apart: 400 s of
+  // recording. Without a budget, every output is a moment of its own and the
+  // replay makes 10,000 flushes of a frame each, more than 5 minutes.
+  it('spreads max-speed flushes over a long recording, one per 167 ms of recorded time', async () => {
+    const events: ReplayInput['events'] = [];
+    for (let index = 0; index < 10_000; index += 1) {
+      events.push(outputEvent(2 * index, 40 * index));
+      events.push(inputEvent(2 * index + 1, 40 * index + 20));
+    }
+    events.push(exitEvent(20_000, 400_000));
+    const flushes = await replayAndRecordFlushes(events, MAX_SPEED);
+
+    // A flush ends at the first event 167 ms after the first output of the
+    // batch, so each one takes 5 outputs (200 ms): about 2,000 flushes.
+    expect(flushes.length).toBeGreaterThan(1_800);
+    expect(flushes.length).toBeLessThanOrEqual(2_401);
+    // No output is lost or moved.
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events
+        .filter((event) => event.type === 'output')
+        .map((event) => `out${String(event.seq)}`),
+    );
+  });
+
+  it('measures the frame budget over the events that the replay applies', async () => {
+    // 20 ms apart: the whole log spans 200 s, but the last 10 events span 180 ms.
+    const events = Array.from({ length: 10_000 }, (_, index) =>
+      outputEvent(index, index * 20),
+    );
+    const flushes = await replayAndRecordFlushes(
+      events,
+      MAX_SPEED,
+      0,
+      () => {},
+      9_989,
+    );
+
+    // 20 ms apart is above the frame hold of 16 ms: a moment each.
+    expect(flushes.map((flush) => flush.chunks)).toEqual(
+      events.slice(9_990).map((event) => [`out${String(event.seq)}`]),
+    );
+  });
+
+  it('does not merge max-speed moments when a flush costs more than a frame hold', async () => {
+    const events = Array.from({ length: 101 }, (_, index) =>
+      outputEvent(index, index * 10),
+    );
+    events.push(exitEvent(101, 1_000));
+    const flushes = await replayAndRecordFlushes(events, MAX_SPEED, 30);
+
+    // Recorded timing lets batches grow while the replay is behind its
+    // schedule. Max-speed has no schedule, so a slow flush must not hide a
+    // moment: every flush holds the outputs of one frame hold (two events).
+    expect(flushes.length).toBe(51);
+    expect(flushes.every((flush) => flush.chunks.length <= 2)).toBe(true);
+    expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
+      events.slice(0, 101).map((event) => `out${String(event.seq)}`),
+    );
+  });
+
+  it('keeps accelerated frames at least one frame hold of recorded time apart', async () => {
+    const accelerated: ReplayTimingOptions = {
+      mode: 'accelerated',
+      maxGapMs: 400,
+      minFrameHoldMs: 100,
+      finalFrameHoldMs: 1_000,
+    };
+    const events = Array.from({ length: 41 }, (_, index) =>
+      outputEvent(index, index * 30),
+    );
+    events.push(exitEvent(41, 1_300));
+    const flushes = await replayAndRecordFlushes(events, accelerated);
+
+    // 30 ms steps, 100 ms holds: a flush takes the outputs of four steps.
+    expect(flushes.map((flush) => flush.chunks.length)).toEqual([
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1,
+    ]);
+    for (let index = 1; index < flushes.length; index += 1) {
+      const gapMs =
+        (flushes[index]?.atMs ?? 0) - (flushes[index - 1]?.atMs ?? 0);
+      expect(gapMs).toBeGreaterThanOrEqual(100);
+    }
   });
 
   it('refreshes continuous output at least once per frame hold', async () => {

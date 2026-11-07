@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -753,6 +754,323 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         },
       ]);
     }
+  });
+
+  // ghostty-web calls a write callback one animation frame (about 17 ms)
+  // after the write. A bridge call that waits on every chunk made a replay cost
+  // one frame per output event: 90 minutes for 250 000 events.
+  it.each([
+    [
+      'replayTo',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayTo(input),
+    ],
+    [
+      'replayWithTiming',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayWithTiming(input, {
+          mode: 'max-speed',
+          minFrameHoldMs: 0,
+          finalFrameHoldMs: 0,
+        }),
+    ],
+  ])(
+    '%s waits for one animation frame per flush of output events, not per event',
+    async (_name, replay) => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      // ghostty-web calls a write callback one frame after the write, so the
+      // number of writes that pass a callback is the number of frames that a
+      // replay waits for. The string keeps vitest from rewriting the import.
+      await page.evaluate(`(async () => {
+        const { Terminal } = await import('/assets/ghostty-web.js');
+        const write = Terminal.prototype.write;
+        globalThis.__writeFrameWaits = 0;
+        Terminal.prototype.write = function (data, callback) {
+          if (callback !== undefined) {
+            globalThis.__writeFrameWaits += 1;
+          }
+          return write.call(this, data, callback);
+        };
+      })()`);
+
+      // One character per event, so a chunk that is lost or moved changes
+      // the text on the screen. 2501 characters fill 32 rows of 80 columns.
+      const characters = Array.from({ length: 2_501 }, (_, seq) =>
+        'abcdefghijklmnopqrstuvwxyz0123456789'.charAt((seq * 7) % 36),
+      );
+      const input = createReplayInput(
+        characters.map((character, seq) => ({
+          seq,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: character },
+        })),
+        { initialRows: 40 },
+      );
+      await replay(backend, input);
+
+      // A bridge call holds at most 1000 chunks, so 2501 events take 3 calls.
+      // Only the last call waits for a frame.
+      expect(
+        await page.evaluate(
+          () =>
+            (globalThis as unknown as { __writeFrameWaits: number })
+              .__writeFrameWaits,
+        ),
+      ).toBe(1);
+      const expectedRows = Array.from({ length: 32 }, (_, row) =>
+        characters.slice(row * 80, (row + 1) * 80).join(''),
+      );
+      const screenRows = (await backend.snapshot()).visibleLines.map(
+        (line) => line.text,
+      );
+      expect(screenRows.slice(0, 32)).toEqual(expectedRows);
+    },
+  );
+
+  // ghostty-web paints on every animation frame, and a WebM records every
+  // paint. A flush of more than 1000 chunks takes several page calls, so a
+  // state that exists between two calls can reach the video.
+  it.each([
+    [
+      'replayTo',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayTo(input),
+    ],
+    [
+      'replayWithTiming',
+      (renderer: GhosttyWebBackend, input: ReplayInput) =>
+        renderer.replayWithTiming(input, {
+          mode: 'max-speed',
+          minFrameHoldMs: 16,
+          finalFrameHoldMs: 200,
+        }),
+    ],
+  ])(
+    '%s paints a flush of several page calls as one frame',
+    async (_name, replay) => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      // The screencast is the source of the frames that Playwright encodes into
+      // a video: it sends a frame for every paint.
+      const screencast = await page.context().newCDPSession(page);
+      const frames: string[] = [];
+      screencast.on('Page.screencastFrame', (frame) => {
+        const hash = createHash('sha256').update(frame.data).digest('hex');
+        if (frames.at(-1) !== hash) {
+          frames.push(hash);
+        }
+        void screencast
+          .send('Page.screencastFrameAck', { sessionId: frame.sessionId })
+          .catch(() => {});
+      });
+      await screencast.send('Page.startScreencast', {
+        format: 'png',
+        everyNthFrame: 1,
+      });
+
+      // Each bridge call of 1000 chunks fills the screen with its own colour
+      // (red, green, blue), so a paint between two calls shows a colour that is
+      // not the last. A pause after each call stands for a slow host.
+      const backgroundFor = (seq: number): number =>
+        [41, 42, 44][Math.floor(seq / 1_000)] ?? 44;
+      const input = createReplayInput(
+        Array.from({ length: 2_501 }, (_, seq) => ({
+          seq,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: `\u001b[${String(backgroundFor(seq))}m\u001b[2J` },
+        })),
+      );
+      const writeBatchBridge = (
+        backend as unknown as {
+          writeBatchBridge: (...args: unknown[]) => Promise<void>;
+        }
+      ).writeBatchBridge.bind(backend);
+      Object.assign(backend as object, {
+        writeBatchBridge: async (...args: unknown[]) => {
+          await writeBatchBridge(...args);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        },
+      });
+      // Wait for the first frame, so that it is the screen before the replay.
+      await expect
+        .poll(() => frames.length, { timeout: 10_000 })
+        .toBeGreaterThan(0);
+      await replay(backend, input);
+      // The last colour must reach the listener. Then wait a little more, so
+      // that a frame between two calls would have arrived too.
+      await expect
+        .poll(() => frames.length, { timeout: 10_000 })
+        .toBeGreaterThan(1);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await screencast.send('Page.stopScreencast');
+
+      // The frame before the replay, then the frame of the last colour.
+      expect(frames).toHaveLength(2);
+    },
+  );
+
+  it('holds the chunks of a flush until the call that ends it', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    const visibleFirstRow = (): Promise<string> =>
+      page.evaluate(
+        `window.__agentTty.getVisibleText().split('\\n')[0]`,
+      ) as Promise<string>;
+    await page.evaluate('window.__agentTty.resize(80, 24)');
+
+    await page.evaluate(`window.__agentTty.writeBatch(['ab'], false)`);
+    await page.evaluate(`window.__agentTty.writeBatch(['cd'], false)`);
+    expect(await visibleFirstRow()).toBe('');
+
+    // A direct write or a resize would move the held chunks behind its own
+    // output, so the page refuses both.
+    await expect(page.evaluate(`window.__agentTty.write('x')`)).rejects.toThrow(
+      'holds the chunks of a flush',
+    );
+    await expect(
+      page.evaluate(`window.__agentTty.resize(100, 30)`),
+    ).rejects.toThrow('holds the chunks of a flush');
+    expect(await visibleFirstRow()).toBe('');
+
+    await page.evaluate(`window.__agentTty.writeBatch(['ef'], true)`);
+    expect(await visibleFirstRow()).toBe('abcdef');
+  });
+
+  // HostRendererManager keeps the backend after a failed replay and retries
+  // from the same seq. The page held the chunks of the calls before the one
+  // that failed, so a retry that started with a resize was refused for good.
+  it('runs a retry that starts with a resize after a page call failed in the middle of a flush', async () => {
+    await backend.boot();
+    // One character per event, so a chunk that is lost, repeated or moved
+    // changes the text on the screen. 2501 characters fill 32 rows of 80
+    // columns.
+    const characters = Array.from({ length: 2_501 }, (_, index) =>
+      'abcdefghijklmnopqrstuvwxyz0123456789'.charAt((index * 7) % 36),
+    );
+    const outputs = (firstSeq: number): ReplayInput['events'] =>
+      characters.map((character, index) => ({
+        seq: firstSeq + index,
+        ts: timestampFor(0),
+        type: 'output' as const,
+        payload: { data: character },
+      }));
+    const writeBatchBridge = (
+      backend as unknown as {
+        writeBatchBridge: (...args: unknown[]) => Promise<void>;
+      }
+    ).writeBatchBridge.bind(backend);
+    let pageCalls = 0;
+    Object.assign(backend as object, {
+      writeBatchBridge: async (...args: unknown[]) => {
+        pageCalls += 1;
+        if (pageCalls === 2) {
+          throw new Error('page call failed');
+        }
+        await writeBatchBridge(...args);
+      },
+    });
+
+    await expect(
+      backend.replayTo(createReplayInput(outputs(0))),
+    ).rejects.toThrow('page call failed');
+
+    Object.assign(backend as object, { writeBatchBridge });
+    await backend.replayTo(
+      createReplayInput(
+        [
+          {
+            seq: 0,
+            ts: timestampFor(0),
+            type: 'resize',
+            payload: { cols: 80, rows: 40 },
+          },
+          ...outputs(1),
+        ],
+        { initialRows: 24 },
+      ),
+    );
+
+    const expectedRows = Array.from({ length: 32 }, (_, row) =>
+      characters.slice(row * 80, (row + 1) * 80).join(''),
+    );
+    const screenRows = (await backend.snapshot()).visibleLines.map(
+      (line) => line.text,
+    );
+    expect(screenRows.slice(0, 32)).toEqual(expectedRows);
+  });
+
+  // A flush of 1001 chunks takes two page calls, and the glyph that it paints
+  // comes with its last chunk. The next flush erases it.
+  it('records the glyphs that a flush painted, in the page call that ends the flush', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    const pageFunctions: string[] = [];
+    const evaluate = page.evaluate.bind(page) as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    Object.assign(page, {
+      evaluate: (pageFunction: unknown, ...rest: unknown[]) => {
+        pageFunctions.push(String(pageFunction));
+        return evaluate(pageFunction, ...rest);
+      },
+    });
+
+    await backend.replayWithTiming(
+      createReplayInput([
+        ...Array.from({ length: 1_000 }, (_, seq) => ({
+          seq,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: 'x' },
+        })),
+        {
+          seq: 1_000,
+          ts: timestampFor(0),
+          type: 'output' as const,
+          payload: { data: '\u0378' },
+        },
+        {
+          seq: 1_001,
+          ts: timestampFor(1),
+          type: 'output' as const,
+          payload: { data: '\u001b[2J\u001b[Hok' },
+        },
+      ]),
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 200 },
+    );
+
+    await expect(backend.recordedMissingGlyphs()).resolves.toEqual({
+      missingGlyphs: [{ codePoint: 'U+0378' }],
+    });
+    // 1001 chunks take 2 calls, the next flush takes 1. None of them has a
+    // call of its own for the note.
+    expect(
+      pageFunctions.filter((source) => source.includes('writeBatch')),
+    ).toHaveLength(3);
+    expect(
+      pageFunctions.filter((source) => source.includes('notePaintedGraphemes')),
+    ).toHaveLength(0);
+  });
+
+  it('writes a flush even when its painted-grapheme note fails, and reports the failure', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await page.evaluate('window.__agentTty.resize(80, 24)');
+
+    // A cap of 0 makes the note throw after the chunks are on the screen.
+    const noteError = await page.evaluate(
+      `window.__agentTty.writeBatch(['ab', 'cd'], true, 0)`,
+    );
+
+    expect(noteError).toEqual(
+      expect.stringContaining('cap must be a positive integer'),
+    );
+    expect(
+      await page.evaluate(`window.__agentTty.getVisibleText().split('\\n')[0]`),
+    ).toBe('abcd');
   });
 
   it('allows dispose to be called more than once', async () => {
