@@ -11,6 +11,7 @@ import {
   cleanupHome,
   createSession,
   destroySession,
+  HERMETIC_BASH,
   readEvents,
   sleep,
 } from '../helpers.js';
@@ -209,7 +210,7 @@ describe(
       // The host default renderer is ghostty-web, so that the catch-up replay
       // after the run uses the slow backend.
       await createSlowSession(
-        ['/bin/bash'],
+        HERMETIC_BASH,
         {
           AGENT_TTY_RENDERER: 'ghostty-web',
           AGENT_TTY_TEST_REPLAY_MS_PER_EVENT: '100',
