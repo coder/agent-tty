@@ -25,7 +25,7 @@ This directory converts a session's event log into recording exports. `generateA
 - Defaults: timing mode `recorded` and profile `reference-dark` [webm.ts:generateWebmExport].
 - A requested `libghostty-vt` renderer is replaced with `ghostty-web`. A code comment says `libghostty-vt` is semantic-only [webm.ts:generateWebmExport].
 - The default backend factory accepts only `ghostty-web` [webm.ts:createDefaultBackend].
-- Timing presets: `accelerated` caps gaps at 400 ms and holds frames at least 100 ms. `max-speed` uses a frame hold of 16 ms, but holds it only after the last flush of the replay and before a resize (see the `ghostty-web` README). Each mode holds the final frame (1000 ms, or 500 ms for `max-speed`) [webm.ts:buildReplayTimingOptions].
+- Timing presets: `accelerated` caps gaps at 400 ms and holds frames at least 100 ms. `max-speed` uses a frame hold of 16 ms, but holds it only after the last flush of the replay and before and after a resize (see the `ghostty-web` README). Each mode holds the final frame (1000 ms, or 500 ms for `max-speed`) [webm.ts:buildReplayTimingOptions].
 - The timed replay fails after `REPLAY_TIMEOUT_MS` (5 minutes) [webm.ts:REPLAY_TIMEOUT_MS].
 - `renderGridFramesToSvg` needs the profile font size `SVG_FONT_SIZE` (14) and draws fixed 8.4x18 px cells, so equal input gives byte-identical output [svg.ts:renderGridFramesToSvg]. It always embeds the JetBrains Mono subset, and embeds each other bundled face only when a glyph needs it [svg.ts:embeddedFontAssets]. Output past `defaultMaxSvgOutputLength` of the V8 heap limit (the heap limit divided by 8 bytes, at most `MAX_SVG_OUTPUT_LENGTH`) fails with `EXPORT_ERROR` [svg.ts:defaultMaxSvgOutputLength].
 

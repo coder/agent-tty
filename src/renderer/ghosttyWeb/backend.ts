@@ -771,8 +771,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         // minimum split of recorded time at most, within the frame budget.
         // The frame wait of such a flush is already its frame, so max-speed
         // holds only after a flush that ends the replay or comes before a
-        // resize: a hold after every flush would export 30 ms steps slower
-        // than they ran.
+        // resize (a resize is followed by a hold too): a hold after every
+        // flush would export 30 ms steps slower than they ran.
         if (
           pendingSinceTimestampMs !== null &&
           eventTimestampMs - pendingSinceTimestampMs >= minSplitMs &&
