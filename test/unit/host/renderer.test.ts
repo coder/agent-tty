@@ -6,6 +6,8 @@ import { setImmediate as setImmediatePromise } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HostRendererManager } from '../../../src/host/renderer.js';
+import { CliError } from '../../../src/cli/errors.js';
+import { GhosttyWebCrashedError } from '../../../src/renderer/ghosttyWeb/index.js';
 import type { RendererBackend } from '../../../src/renderer/backend.js';
 import { iterateInRangeReplayEvents } from '../../../src/renderer/replayEvents.js';
 import type {
@@ -310,6 +312,60 @@ describe('HostRendererManager', () => {
     expect(secondBackend).not.toBe(firstBackend);
     expect(backendFactory).toHaveBeenCalledTimes(2);
     expect(crashedBackend.disposeMock).toHaveBeenCalledTimes(1);
+  });
+
+  // KNOWN-BUG TEST for a ghostty-web 0.4.0 fault: remove it with
+  // GhosttyWebCrashedError when ghostty-web has a fix.
+  it('reports a crashed ghostty-web page as a REPLAY_ERROR that is not retryable', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+    const crash = new GhosttyWebCrashedError(
+      new Error('page.evaluate: Target crashed '),
+    );
+    backendFactory.mockImplementationOnce(() => {
+      const backend = createFakeBackend();
+      backend.replayTo = vi.fn(
+        (): Promise<ReplayState> => Promise.reject(crash),
+      );
+      backends.push(backend);
+      return backend;
+    });
+
+    const failure: unknown = await manager
+      .getBackend('ghostty-web', createProfile(), createReplayInput())
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CliError);
+    expect(failure).toMatchObject({
+      code: 'REPLAY_ERROR',
+      message: crash.message,
+      retryable: false,
+      cause: crash,
+    });
+  });
+
+  it('passes every other renderer failure through unchanged', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+    const failure = new Error('replay failed');
+    backendFactory.mockImplementationOnce(() => {
+      const backend = createFakeBackend();
+      backend.replayTo = vi.fn(
+        (): Promise<ReplayState> => Promise.reject(failure),
+      );
+      backends.push(backend);
+      return backend;
+    });
+
+    await expect(
+      manager.getBackend('ghostty-web', createProfile(), createReplayInput()),
+    ).rejects.toBe(failure);
   });
 
   it('disposes the current backend when boot fails so the next attempt can recover', async () => {

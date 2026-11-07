@@ -71,10 +71,10 @@ describe.skipIf(process.platform !== 'linux')(
         ['snapshot', sessionId, '--renderer', 'ghostty-web', '--json'],
       ]) {
         const result = runCli(args, env, CLI_TIMEOUT_MS);
-        expect(result.status, args.join(' ')).toBe(9);
+        expect(result.status, args.join(' ')).toBe(10);
         const error = parseError(result.stdout);
-        expect(error.code).toBe('RPC_ERROR');
-        expect(error.retryable).toBe(true);
+        expect(error.code).toBe('REPLAY_ERROR');
+        expect(error.retryable).toBe(false);
         expect(error.message).toContain(CRASH_EXPLANATION);
         expect(error.message).toContain('Target crashed');
       }

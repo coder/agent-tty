@@ -475,7 +475,7 @@ Every command exits with a stable code, so scripts can branch without parsing ou
 | `7`       | Export failed.                                                                                                              |
 | `8`       | Storage read/write or manifest validation error.                                                                            |
 | `9`       | Protocol or RPC error.                                                                                                      |
-| `10`      | Replay failed.                                                                                                              |
+| `10`      | Replay failed, or the `ghostty-web` page crashed during a replay.                                                           |
 | `11`      | A standalone `wait` timed out, or a `wait` step inside a fail-fast `batch` timed out (`WAIT_TIMEOUT`; see [`wait`](#wait)). |
 | `12`      | A requested runtime capability is unavailable (`CAPABILITY_UNAVAILABLE`).                                                   |
 | `130`     | Interrupted by SIGINT: a `batch` that flushed its partial result, or a `destroy` whose copy in a new session SIGINT ended.  |
