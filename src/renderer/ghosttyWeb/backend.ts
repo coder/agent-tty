@@ -708,6 +708,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let pendingSinceTimestampMs: number | null = null;
     let scheduleStartedAtMs = 0;
     let scheduledElapsedMs = 0;
+    // True after a flush that no hold followed. The next resize pays that hold.
+    let lastFlushUnheld = false;
 
     const flushOutputBatch = async (holdFrame = true): Promise<void> => {
       if (pendingOutputChunks.length === 0) {
@@ -720,6 +722,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       if (holdFrame) {
         await waitForDelay(resolvedMinFrameHoldMs);
       }
+      lastFlushUnheld = !holdFrame;
     };
 
     // Events that change no pixel end a flush in recorded and accelerated
@@ -803,6 +806,13 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         }
         case 'resize': {
           await flushOutputBatch();
+          // A flush that the timestamp check made earlier has no hold, and
+          // the resize then finds nothing pending. The screen before the
+          // resize still needs its frame hold to reach the video.
+          if (lastFlushUnheld) {
+            await waitForDelay(resolvedMinFrameHoldMs);
+            lastFlushUnheld = false;
+          }
           assertPositiveInteger(
             event.payload.cols,
             'resize event cols must be a positive integer',

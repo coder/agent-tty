@@ -1793,6 +1793,52 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     expect((atMs('resize 100') ?? 0) - (atMs('flush out0') ?? 0)).toBe(16);
   });
 
+  // The timestamp check ends a max-speed flush without a hold. When that flush
+  // comes before a resize, the resize finds nothing pending, so the hold of the
+  // resize case is the only one left. Without it the resize changes the canvas
+  // before the video has recorded the screen before the resize.
+  it.each([
+    {
+      label: 'the resize itself ends the flush',
+      events: [
+        outputEvent(0, 0),
+        resizeEvent(1, 20),
+        outputEvent(2, 40),
+        exitEvent(3, 42),
+      ],
+    },
+    {
+      label: 'an input before the resize ends the flush',
+      events: [
+        outputEvent(0, 0),
+        inputEvent(1, 20),
+        resizeEvent(2, 25),
+        outputEvent(3, 40),
+        exitEvent(4, 42),
+      ],
+    },
+  ])(
+    'holds one frame hold between the last flush and a resize when $label',
+    async ({ events }) => {
+      const timeline = await replayAndRecordTimeline(events, {
+        mode: 'max-speed',
+        minFrameHoldMs: 16,
+        finalFrameHoldMs: 0,
+      });
+
+      expect(timeline.map((entry) => entry.step)).toEqual([
+        'flush out0',
+        'resize 100',
+        'note',
+        'flush out' + String(events.length - 2),
+        'snapshot',
+      ]);
+      const atMs = (step: string): number =>
+        timeline.find((entry) => entry.step === step)?.atMs ?? Number.NaN;
+      expect(atMs('resize 100') - atMs('flush out0')).toBe(16);
+    },
+  );
+
   it.each([
     ['recorded', RECORDED],
     ['max-speed', MAX_SPEED],
