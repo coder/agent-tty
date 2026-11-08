@@ -26,11 +26,12 @@ import { resolveProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
 import { invariant, unreachable } from '../util/assert.js';
 
-// The replay fails when the renderer makes no progress for this long. A bridge
-// call writes at most 1000 output chunks, and the longest one that a measured
-// export made took 22 s on a loaded host. The window is the old fixed limit on
-// the whole replay, so an export that fit before still fits. Boot and finalize
-// run outside the watchdog.
+// The replay fails when the renderer makes no progress for this long. A healthy
+// replay is silent for the length of one page call at most. The call that ends
+// a flush writes the chunks of the whole flush, and the event log limit (50
+// MiB) bounds that. The window is the old fixed limit on the whole replay, so
+// an export that fit before still fits. Boot and finalize run outside the
+// watchdog.
 const REPLAY_STALL_WINDOW_MS = 5 * 60 * 1000;
 // Node runs a timer with a longer delay after 1 ms.
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
