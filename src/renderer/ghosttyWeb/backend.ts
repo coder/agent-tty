@@ -142,11 +142,12 @@ const MAX_REPLAY_BATCH_SIZE = 1000;
  * however long the recording is. A resize ends one more flush, and this limit
  * does not count it, so a log with many resizes makes more. A flush costs one
  * animation frame, one page call and one scan of the screen, and that cost
- * grows with the terminal size and the load of the host. Measured on PR 358
- * (host CPU pressure 15 to 44 %): 400 outputs 20 ms apart took 18 to 20 ms per
- * flush at 80x24. A worst-case log of 2,400 full-screen repaints 17 ms apart
- * at 200x60 took 287 s (120 ms per flush) in two runs, and 368 s (153 ms per
- * flush) in a run of a verifier at pressure 23 to 38 %. A WebM export allows
+ * grows with the terminal size and the load of the host. Measured on PR 358:
+ * 400 outputs 20 ms apart took 18 to 20 ms per flush at 80x24 (host CPU
+ * pressure 4 to 22 %). A worst-case log of 2,400 full-screen repaints 17 ms
+ * apart at 200x60 took 287 s (120 ms per flush) in two runs at pressure 15 to
+ * 44 %, and 368 s (153 ms per flush) in a run of a verifier at pressure 23 to
+ * 38 %. A WebM export allows
  * its replay 5 minutes (REPLAY_TIMEOUT_MS), so a loaded host can pass that
  * limit at a large terminal size and fail the export. PR 356 replaces that
  * limit with a stall window. The video has 25 frames per second, so this many
