@@ -51,6 +51,10 @@ import {
 
 const zombieLeader = resolve('test/fixtures/zombie-leader.py');
 const forkChain = resolve('test/fixtures/fork-chain.py');
+// A create waits up to 30 s for a host that runs and never listens. With the
+// monotonic clock 5 times as fast (test/fixtures/fast-clock.ts), a create
+// that waits for a held host gives up after about 6 s.
+const CREATE_DEADLINE_CLOCK_FACTOR = '5';
 
 function groupStates(group: number): string[] {
   return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
@@ -102,6 +106,24 @@ interface GcResult {
 }
 
 let testHome = '';
+
+// The host captures the session token only while the program runs, so a
+// program that would exit at once first waits until program.json is in
+// place. A capture that still found no token leaves gc and destroy nothing
+// to prove, so a test of their group check skips then.
+function untilRecorded(): string {
+  return `until [ -f "${testHome}/sessions/$AGENT_TTY_SESSION_ID/program.json" ]; do sleep 0.01; done`;
+}
+
+async function recordsToken(sessionId: string): Promise<boolean> {
+  const record = JSON.parse(
+    await readFile(
+      join(testHome, 'sessions', sessionId, 'program.json'),
+      'utf8',
+    ),
+  ) as { bootId: unknown };
+  return record.bootId !== null;
+}
 
 // Many tests spend 5 to 15 s in real waits and CLI starts, and a loaded
 // runner takes up to three times as long.
@@ -947,24 +969,6 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
       }
       expect(isGroupAlive(pgid)).toBe(true);
       return sessionId;
-    }
-
-    // The host captures the session token only while the program runs, so a
-    // program that would exit at once first waits until program.json is in
-    // place. A capture that still found no token leaves gc nothing to prove,
-    // so a test of gc's group check skips then.
-    function untilRecorded(): string {
-      return `until [ -f "${testHome}/sessions/$AGENT_TTY_SESSION_ID/program.json" ]; do sleep 0.01; done`;
-    }
-
-    async function recordsToken(sessionId: string): Promise<boolean> {
-      const record = JSON.parse(
-        await readFile(
-          join(testHome, 'sessions', sessionId, 'program.json'),
-          'utf8',
-        ),
-      ) as { bootId: unknown };
-      return record.bootId !== null;
     }
 
     it('destroy ends it within the destroy wait', async () => {
@@ -1824,25 +1828,43 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
   // An exited session has no host to end it, so its leftover needs a destroy
   // from a process that can read /proc.
   // In another pid namespace no probe finds the leftover either.
-  it.runIf(capturesToken).each([
+  it.runIf(capturesToken).for<[string, string]>([
     ['in the pid namespace of the host', '0'],
     ['in another pid namespace', '1'],
   ])(
     'destroy of an exited session from a CLI that sees no /proc, %s, names /proc while its leftover runs',
-    async (_, otherPids) => {
+    async ([, otherPids], { skip }) => {
       vi.stubEnv('XDG_STATE_HOME', join(testHome, 'state'));
       let pgid = 0;
       try {
-        const sessionId = createSession(testHome, [
-          '/bin/sh',
-          '-c',
-          'trap "" HUP; sleep 300 & exit 0',
-        ]);
+        // A host that a loaded machine does not run for a while after it
+        // spawns the program would read the program's session after the
+        // program exited, so the program waits for the record.
+        const sessionId = createSession(
+          testHome,
+          [
+            '/bin/sh',
+            '-c',
+            `trap "" HUP; sleep 300 & ${untilRecorded()}; exit 0`,
+          ],
+          {
+            env: {
+              AGENT_TTY_TEST_STALL_AFTER_SPAWN_MS: '200',
+              NODE_OPTIONS: [
+                process.env.NODE_OPTIONS ?? '',
+                `--import=${pathToFileURL(resolve('test/fixtures/stall-after-spawn.ts')).href}`,
+              ].join(' '),
+            },
+          },
+        );
         pgid = inspectSession(testHome, sessionId).childPid as number;
         const deadline = Date.now() + 10_000;
         while (inspectSession(testHome, sessionId).status !== 'exited') {
           expect(Date.now()).toBeLessThan(deadline);
           await sleep(50);
+        }
+        if (!(await recordsToken(sessionId))) {
+          skip('the host captured no session token');
         }
         expect(isGroupAlive(pgid)).toBe(true);
         const preload = pathToFileURL(resolve('test/fixtures/no-proc.ts')).href;
@@ -2035,9 +2057,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
             REPLAY_LOG: holdLog,
             REPLAY_RELEASE: release,
             REPLAY_HOLD: '_host:rename:/session.json:1:60000',
+            AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
               ...preloads,
             ].join(' '),
           },
@@ -2120,9 +2144,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           REPLAY_LOG: holdLog,
           REPLAY_RELEASE: release,
           REPLAY_HOLD: '_host:open:/events.jsonl:1:60000',
+          AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
           NODE_OPTIONS: [
             process.env.NODE_OPTIONS ?? '',
             `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+            `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
             `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
           ].join(' '),
         },
@@ -2208,9 +2234,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
             REPLAY_LOG: holdLog,
             REPLAY_RELEASE: release,
             REPLAY_HOLD: `_host:mkdir:/${socketDirectory}:1:60000`,
+            AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/fail-manifest-read-after-marker.ts')).href}`,
@@ -2381,9 +2409,8 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     // pid. Holding that write keeps create's manifest, with no childPid, for
     // the whole destroy. The hold matches the host's argv only, so the inner
     // CLI, which inherits it, runs at full speed. A held host never answers
-    // create, which gives up after about 5 s and sends it SIGTERM. On a slow
-    // runner that came before the inner destroy, so create is killed once it
-    // has written the manifest, which the host still reads after its creator
+    // create, which waits for it. The test kills create once it has written
+    // the manifest. The host still reads that manifest after its creator
     // died, and the destroy kills the held host.
     it('destroy --force before the host names the program prints its result', async () => {
       const out = join(testHome, 'early-destroy.json');

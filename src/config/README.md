@@ -10,6 +10,7 @@
 - `DEFAULT_SHELL` is `process.env.SHELL`, or `'/bin/sh'` when `SHELL` is unset. [defaults.ts:DEFAULT_SHELL]
 - `DEFAULT_LOG_LEVEL` is re-exported from `src/util/logger.ts`. [src/util/logger.ts:DEFAULT_LOG_LEVEL]
 - `HOST_RENDERER_ENV_KEY` is the environment variable name `'AGENT_TTY_HOST_RENDERER'`. [defaults.ts:HOST_RENDERER_ENV_KEY]
+- `CREATE_FAILED_WATCH_MAX_MS` (60,000) is how long the host watches for the `create-failed` marker while its creator runs. A `create` ends before that, because its readiness wait ends at 30 s and its marker retries take about 5 s. A unit test pins that. [defaults.ts:CREATE_FAILED_WATCH_MAX_MS]
 - `MANIFEST_FILENAME` (`'session.json'`) and `EVENT_LOG_FILENAME` (`'events.jsonl'`) are the per-session file names that `manifestPath` and `eventLogPath` use. [defaults.ts:MANIFEST_FILENAME] [defaults.ts:EVENT_LOG_FILENAME] [src/storage/sessionPaths.ts:manifestPath] [src/storage/sessionPaths.ts:eventLogPath]
 - `SOCKET_FILENAME` (`'host.sock'`) only fills `AgentTtyConfig.socketFilename`, and no code reads that field. The session socket path comes from `socketPath` in `src/storage/sessionPaths.ts`, not from this constant. [defaults.ts:SOCKET_FILENAME] [resolveConfig.ts:resolveConfig] [src/storage/sessionPaths.ts:socketPath]
 - `ConfigFileSchema` and its type `ConfigFile` describe `config.json`. All fields are optional: `logLevel`, `defaultProfile`, `defaultRenderer`, `defaultShell`, `defaultTerm`, `defaultCols`, `defaultRows` and `idleTimeoutMs`. [resolveConfig.ts:ConfigFileSchema] [resolveConfig.ts:ConfigFile]

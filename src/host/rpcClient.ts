@@ -26,6 +26,7 @@ import { ResourceScope } from '../util/resourceScope.js';
 import { isOwnLegacySocket, socketRootExists } from './socketRoot.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
+const LEADING_SPACES = /^ +/;
 const HOST_UNREACHABLE_SOCKET_CODES = new Set([
   'ECONNREFUSED',
   'ENOENT',
@@ -228,8 +229,18 @@ async function sendRpcAt(
       rejectWithTransportError(error);
     });
 
-    socket.on('data', (chunk: string) => {
+    socket.on('data', (received: string) => {
       if (responseHandled) {
+        return;
+      }
+
+      // A host may write spaces ahead of the response as keep-alives. The
+      // response cap counts the response line alone, as the host does, so a
+      // response at the cap does not fail after keep-alives. Only a space is
+      // a keep-alive: a newline ends the line.
+      const chunk =
+        buffer.length === 0 ? received.replace(LEADING_SPACES, '') : received;
+      if (chunk.length === 0) {
         return;
       }
 

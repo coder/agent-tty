@@ -281,7 +281,7 @@ function giveUpCatch(body) {
     if (
       tried.length === 1 &&
       tried[0] ===
-        'result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);'
+        'result = await waitForReadyHost( socketFile, sessionDirectory, sessionId, host.pid, );'
     ) {
       // The text-mode line that names the session changes no process or
       // file, so the facts skip it.
@@ -299,9 +299,8 @@ function stopsOnGiveUp(body) {
   const st = giveUpCatch(body) ?? [];
   // No statement before the stop leaves the catch.
   const stops =
-    st.length >= 4 &&
-    st[0].startsWith('invariant(host !== undefined,') &&
-    st.slice(1, -2).every((t) => !/\b(return|throw|break)\b/.test(t)) &&
+    st.length >= 3 &&
+    st.slice(0, -2).every((t) => !/\b(return|throw|break)\b/.test(t)) &&
     st.at(-2) ===
       "if (process.platform !== 'win32' || manifest?.childPid != null) { host.stop(); }" &&
     st.at(-1) === 'throw withSessionId(error, sessionId);';
@@ -335,12 +334,12 @@ function stopsOnGiveUp(body) {
 function checksCreateFailed(body) {
   const st = giveUpCatch(body) ?? [];
   const marks =
-    st.length >= 8 &&
-    st[1] === 'const markerFile = createFailedMarkerPath(sessionDirectory);' &&
-    st[2] === 'const manifestFile = manifestPath(sessionDirectory);' &&
-    st[4] ===
+    st.length >= 7 &&
+    st[0] === 'const markerFile = createFailedMarkerPath(sessionDirectory);' &&
+    st[1] === 'const manifestFile = manifestPath(sessionDirectory);' &&
+    st[3] ===
       'let marked = await writeMarkerOrLog(markerFile, sessionId, logger);' &&
-    st[5] ===
+    st[4] ===
       'let manifest = await readManifestIfExists(manifestFile).catch(() => null);' &&
     writesMarker();
   const run = requireDeclaration('src/host/hostMain.ts', 'runHost').body;
@@ -406,8 +405,8 @@ function retriesMarker(body) {
     requireDeclaration('src/cli/commands/create.ts', 'hostRuns').body.getText(),
   );
   return (
-    st.length === 9 &&
-    st[6] === loop &&
+    st.length === 8 &&
+    st[5] === loop &&
     probe ===
       '{ try { return isProcessAlive(pid); } catch { return false; } }' &&
     checksCreateFailed(body)

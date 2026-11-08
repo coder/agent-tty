@@ -480,6 +480,82 @@ describe('executeBatch', () => {
       });
     });
 
+    it('names where the host reports that its event log stopped in the message of a timed-out wait', async () => {
+      const { driver } = createFakeDriver({
+        waitResults: [
+          {
+            matched: false,
+            timedOut: true,
+            capturedAtSeq: 5,
+            eventLogStop: { reason: 'events', seq: 5 },
+          },
+        ],
+      });
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never', timeout: 1000 } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        status: 'failed',
+        timedOut: true,
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message:
+            'Render wait at step 0 timed out after 1000 ms. The event log stopped at seq 5 (event limit), so output after it is not seen.',
+        },
+      });
+    });
+
+    it('names a stop in each timed-out wait of a keep-going batch', async () => {
+      const stopped = {
+        matched: false,
+        timedOut: true,
+        capturedAtSeq: 5,
+        eventLogStop: { reason: 'bytes' as const, seq: 5 },
+      };
+      const { driver } = createFakeDriver({
+        waitResults: [stopped, stopped],
+      });
+      const result = await executeBatch({
+        plan: plan([
+          { wait: { text: 'one', timeout: 1000 } },
+          { wait: { text: 'two', timeout: 1000 } },
+        ]),
+        driver,
+        keepGoing: true,
+      });
+
+      expect(result.failedIndices).toEqual([0, 1]);
+      expect(
+        result.steps.map((step) =>
+          step.status === 'failed' ? step.error?.message : undefined,
+        ),
+      ).toEqual([
+        'Render wait at step 0 timed out after 1000 ms. The event log stopped at seq 5 (byte limit), so output after it is not seen.',
+        'Render wait at step 1 timed out after 1000 ms. The event log stopped at seq 5 (byte limit), so output after it is not seen.',
+      ]);
+    });
+
+    it('keeps the message of a timed-out wait when the host reports no stop', async () => {
+      const { driver } = createFakeDriver({
+        waitResults: [{ matched: false, timedOut: true, capturedAtSeq: 5 }],
+      });
+      const result = await executeBatch({
+        plan: plan([{ wait: { text: 'never', timeout: 1000 } }]),
+        driver,
+        keepGoing: false,
+      });
+
+      expect(result.steps[0]).toMatchObject({
+        error: {
+          code: 'WAIT_TIMEOUT',
+          message: 'Render wait at step 0 timed out after 1000 ms.',
+        },
+      });
+    });
+
     it('treats an unmatched-but-not-timedOut wait as a WAIT_TIMEOUT failure', async () => {
       const { driver } = createFakeDriver({
         waitResults: [{ matched: false, timedOut: false, capturedAtSeq: 1 }],

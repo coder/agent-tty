@@ -58,7 +58,10 @@ import {
   canonicalVisibleText,
   computeScreenHash,
 } from '../renderer/canonicalScreen.js';
-import { HOST_RENDERER_ENV_KEY } from '../config/defaults.js';
+import {
+  CREATE_FAILED_WATCH_MAX_MS,
+  HOST_RENDERER_ENV_KEY,
+} from '../config/defaults.js';
 import {
   DEFAULT_RENDERER_NAME,
   resolveRendererName,
@@ -107,9 +110,6 @@ export const MAX_CONSECUTIVE_POLL_FAILURES = 10;
 const IDLE_CHECK_CAP_MS = 5_000;
 const MANIFEST_WAIT_INTERVAL_MS = 20;
 const CREATE_FAILED_POLL_INTERVAL_MS = 100;
-// A create ends well within this time after its host's start-up check: its
-// readiness wait and its marker retries take about 20 s at most.
-const CREATE_FAILED_WATCH_MAX_MS = 60_000;
 // How long the host waits after SIGHUP before it kills the program's process
 // group. nvim takes about 1 s to exit on SIGHUP, and `destroy` waits about 5 s.
 const SHUTDOWN_KILL_GRACE_MS = 2_000;
@@ -393,7 +393,10 @@ export async function runHost(
     appendMouseEvent: (payload) => eventLog.append('input_mouse', payload),
   });
 
-  const replayRendererThroughSeq = async (targetSeq: number): Promise<void> => {
+  const replayRendererThroughSeq = async (
+    targetSeq: number,
+    keepAlive: () => void,
+  ): Promise<void> => {
     invariant(
       Number.isInteger(targetSeq) && targetSeq >= 0,
       'targetSeq must be a non-negative integer',
@@ -421,6 +424,7 @@ export async function runHost(
           'renderer snapshot must include the run-complete event sequence',
         );
       },
+      keepAlive,
     );
   };
 
@@ -638,7 +642,7 @@ export async function runHost(
         rendererBootInFlight,
       };
     },
-    snapshot: async (params: unknown) => {
+    snapshot: async (params: unknown, context) => {
       const {
         format: requestedFormat,
         includeScrollback: requestedIncludeScrollback,
@@ -672,6 +676,7 @@ export async function runHost(
           }),
           rendererBackend: backend.rendererBackend,
         }),
+        context.keepAlive,
       );
       return await captureSnapshotResult({
         sessionDir: sessDir,
@@ -681,7 +686,7 @@ export async function runHost(
         expectedSessionId: sessionId,
       });
     },
-    screenshot: async (params: unknown) => {
+    screenshot: async (params: unknown, context) => {
       const {
         profile: requestedProfileName,
         rendererName: requestedRendererName,
@@ -713,14 +718,18 @@ export async function runHost(
         rendererName,
         profile,
         () => loadReplayInput(),
-        async (backend) =>
+        async (backend, _replayInput, reportProgress) =>
           await captureScreenshotResult({
             backend,
             sessionDir: sessDir,
             profileName: profile.name,
             expectedSessionId: sessionId,
             ...(showCursor === undefined ? {} : { showCursor }),
+            // Not `context.keepAlive`: a command that waits behind this
+            // screenshot in the renderer queue must hear of the progress too.
+            onReplayProgress: reportProgress,
           }),
+        context.keepAlive,
       );
     },
     type: async (params: unknown) => {
@@ -822,7 +831,7 @@ export async function runHost(
 
       if (waitResult.kind === 'completed') {
         try {
-          await replayRendererThroughSeq(waitResult.seq);
+          await replayRendererThroughSeq(waitResult.seq, context.keepAlive);
         } catch {
           // The run already completed and was committed to the event log. Do not
           // turn a best-effort renderer catch-up failure into a command retry
@@ -1200,10 +1209,14 @@ export async function runHost(
                   // Best-effort snapshot for timeout reporting.
                 }
 
+                // The host's own log tells whether it stopped, so the wait
+                // does not depend on what the file holds yet.
+                const eventLogStop = eventLog.getStop();
                 return {
                   matched: false,
                   timedOut: true,
                   capturedAtSeq: latestCapturedAtSeq,
+                  ...(eventLogStop === undefined ? {} : { eventLogStop }),
                 };
               },
             }),

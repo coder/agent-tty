@@ -28,10 +28,17 @@ import {
   socketPath,
 } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
+import { hasErrorCode } from '../../util/hasErrorCode.js';
 
 const READINESS_POLL_INTERVAL_MS = 100;
-const READINESS_MAX_ATTEMPTS = 50;
 const READINESS_RPC_TIMEOUT_MS = 100;
+// Create waits for a host process that runs for as long as it needs to start.
+// This limit is only for a host that runs and never answers, for example one
+// that a signal stopped. It stays inside the host's create-failed watch
+// (CREATE_FAILED_WATCH_MAX_MS, 60 s), so the host still sees the marker of a
+// create that gives up at this limit. The unit test `ends before the host stops
+// watching for its create-failed marker` pins that.
+const READINESS_DEADLINE_MS = 30_000;
 const MARKER_RETRY_INTERVAL_MS = 100;
 const MARKER_RETRY_MAX_ATTEMPTS = 50;
 
@@ -129,12 +136,29 @@ async function readCreateResult(
   return toCreateResult(manifest);
 }
 
+// sendRpc maps only ECONNREFUSED, ENOENT and ECONNRESET to HOST_UNREACHABLE.
+// It reports EPIPE as RPC_ERROR. The probe gets it when the host closes its
+// server as the probe connects and writes, as a host does whose program has
+// already exited. Like an unreachable host, it says nothing about the
+// session, so the host and the manifest decide.
+function isClosedByHost(error: CliError): boolean {
+  return (
+    error.code === ERROR_CODES.RPC_ERROR && hasErrorCode(error.cause, 'EPIPE')
+  );
+}
+
+// A host that runs can still start, and a start-up on a loaded machine takes as
+// long as the machine needs. So create keeps asking while the host process
+// that it spawned runs. It gives up as soon as that process has exited, since
+// nothing will answer then, and at READINESS_DEADLINE_MS in any case.
 async function waitForReadyHost(
   socketFile: string,
   sessionDirectory: string,
   sessionId: string,
+  hostPid: number,
 ): Promise<CreateResult> {
-  for (let attempt = 0; ; attempt += 1) {
+  const startedAt = performance.now();
+  for (;;) {
     try {
       await sendRpc(socketFile, 'inspect', undefined, READINESS_RPC_TIMEOUT_MS);
       return await readCreateResult(sessionDirectory, sessionId);
@@ -142,17 +166,24 @@ async function waitForReadyHost(
       if (
         !(error instanceof CliError) ||
         (error.code !== ERROR_CODES.HOST_UNREACHABLE &&
-          error.code !== ERROR_CODES.HOST_TIMEOUT)
+          error.code !== ERROR_CODES.HOST_TIMEOUT &&
+          !isClosedByHost(error))
       ) {
         throw error;
       }
+      // Before the manifest read: a host that has exited finished all its
+      // writes first, so a read after this check sees its last write.
+      const hostExited = !hostRuns(hostPid);
       const manifest = await readManifestIfExists(
         manifestPath(sessionDirectory),
       );
       if (manifest?.status === 'exited') {
         return toCreateResult(manifest);
       }
-      if (attempt + 1 >= READINESS_MAX_ATTEMPTS) {
+      if (
+        hostExited ||
+        performance.now() - startedAt >= READINESS_DEADLINE_MS
+      ) {
         throw error;
       }
       await delay(READINESS_POLL_INTERVAL_MS);
@@ -293,9 +324,15 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
   const sessionDirectory = sessionDir(home, sessionId);
   const socketFile = socketPath(sessionDirectory);
 
+  invariant(host !== undefined, 'a session that create polls has a host');
   let result: CreateResult;
   try {
-    result = await waitForReadyHost(socketFile, sessionDirectory, sessionId);
+    result = await waitForReadyHost(
+      socketFile,
+      sessionDirectory,
+      sessionId,
+      host.pid,
+    );
   } catch (error) {
     // Every error here fails the create, and a host that answers later would
     // serve that failed session. The host knows its program's pid also
@@ -305,7 +342,6 @@ export async function runCreateCommand(options: CommandOptions): Promise<void> {
     // So create first writes the create-failed marker, and the host checks
     // for it after its start-up write names the program: either the host
     // finds the marker, or the manifest read below finds the program.
-    invariant(host !== undefined, 'a session that create polls has a host');
     const markerFile = createFailedMarkerPath(sessionDirectory);
     const manifestFile = manifestPath(sessionDirectory);
     const logger = options.context.logger;

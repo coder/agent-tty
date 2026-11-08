@@ -44,8 +44,8 @@
     "Terminal": ["destroyed", "exited", "failed"]
   },
   "fingerprints": {
-    "src/cli/commands/create.ts#runCreateCommand": "bb4fa596cc1e4af7",
-    "src/cli/commands/create.ts#waitForReadyHost": "a7fd2ba345b6bfd6",
+    "src/cli/commands/create.ts#runCreateCommand": "4b419acb46ce6a32",
+    "src/cli/commands/create.ts#waitForReadyHost": "c73abcc0002fb1f3",
     "src/cli/commands/create.ts#writeMarkerOrLog": "abf293bd80df1c3d",
     "src/cli/commands/create.ts#hostRuns": "b80eac3bb9523aaf",
     "src/cli/commands/destroy.ts#runDestroyCommand": "ecaa8b1d572da7c6",
@@ -133,7 +133,7 @@
     "src/host/sessionState.ts#SessionState.requestDestroy": "f66074e815527ff1",
     "src/host/sessionState.ts#SessionState.recordDestroyed": "495b3a20c56b6330",
     "src/host/sessionState.ts#SessionState.recordExit": "a4f3f6706ae953c3",
-    "src/host/eventLog.ts#EventLog.open": "4d4a1c04ce17c37d",
+    "src/host/eventLog.ts#EventLog.open": "19229956e761db8c",
     "src/host/rpcServer.ts#RpcServer.listen": "aa62e1cd89eceaa4",
     "src/host/rpcServer.ts#RpcServer.close": "2d8092cceb4b8e13",
     "src/storage/manifests.ts#readValidatedJsonFile": "6287eb627b09bf80",
@@ -149,8 +149,8 @@
     "src/host/hostMain.ts#runHost(final try)": "e0615a9709fefb67",
     "src/host/hostMain.ts#runHost>handlers.resize": "d601680963309542",
     "src/host/hostMain.ts#runHost>handlers.destroy": "ccff44951e711dac",
-    "skill:model/SessionLifecycle.tla": "9d2f5e19d5de78d2",
-    "skill:scripts/facts.mjs": "36ed7de152b0c580",
+    "skill:model/SessionLifecycle.tla": "d5bc54e9007eee55",
+    "skill:scripts/facts.mjs": "2646e5666654796b",
     "skill:scripts/check.sh": "5cf0c5286124ebeb"
   },
   "callSites": {
