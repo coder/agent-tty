@@ -3,8 +3,10 @@
 // `?47h` or `?1047h` follows a full reset (RIS, `ESC c`). Output over a cell
 // that holds a combining mark or another grapheme cluster then makes the WASM
 // module fault, and Chromium kills the page ("Target crashed"). The shortest
-// input is `a`, U+0301, `ESC c`, `ESC [ ? 4 7 h`, `o`. Upstream ghostty-web
-// has no release with a fix. Remove this error when ghostty-web has one.
+// input is `a`, U+0301, `ESC c`, `ESC [ ? 4 7 h`, `o`. Upstream issue:
+// https://github.com/coder/ghostty-web/issues/215. No ghostty-web release has
+// a fix yet. When one closes it, remove this error, or invert the tests that
+// carry a KNOWN-BUG header, and bump the version that the message names.
 const CRASH_EXPLANATION =
   "ghostty-web crashed while it replayed this session's output. One known cause is a ghostty-web 0.4.0 bug: after a full reset (ESC c), the alternate screen (?47h or ?1047h) keeps the old cells, and output over a combining mark or other grapheme cluster there crashes the page. The libghostty-vt renderer and `record export --format svg` are not affected.";
 

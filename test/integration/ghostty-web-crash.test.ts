@@ -1,6 +1,8 @@
 // KNOWN-BUG TESTS. They pin how agent-tty reports a ghostty-web 0.4.0 fault
-// (see src/renderer/ghosttyWeb/crashError.ts). When ghostty-web has a fix,
-// bump it and delete this file, or invert it to expect a screenshot.
+// (see src/renderer/ghosttyWeb/crashError.ts). Upstream issue:
+// https://github.com/coder/ghostty-web/issues/215. When a ghostty-web release
+// fixes it and agent-tty upgrades to it, delete this file, or invert it to
+// expect a screenshot.
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

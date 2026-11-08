@@ -8,8 +8,9 @@ import {
 } from '../../../src/renderer/ghosttyWeb/index.js';
 import { describeReplayFailure } from '../../../src/renderer/ghosttyWeb/crashError.js';
 
-// KNOWN-BUG TESTS for a ghostty-web 0.4.0 fault. Remove them with
-// src/renderer/ghosttyWeb/crashError.ts when ghostty-web has a fix.
+// KNOWN-BUG TESTS for a ghostty-web 0.4.0 fault, upstream issue
+// https://github.com/coder/ghostty-web/issues/215. Remove them with
+// src/renderer/ghosttyWeb/crashError.ts when a ghostty-web release fixes it.
 
 const CRASHED = new Error('page.evaluate: Target crashed ');
 
@@ -55,10 +56,21 @@ describe('describeReplayFailure', () => {
     expect(crash.message).toContain('(page.evaluate: Target crashed)');
   });
 
-  it('returns every other failure as it is', () => {
-    const other = new Error('ghostty-web bridge write() is unavailable');
+  // Real Playwright and harness messages that are not a crash. A looser
+  // pattern (`/Target/`, `/crash/i`, or one that adds the closed-page text)
+  // would call them one and release a healthy page.
+  it.each([
+    'ghostty-web bridge write() is unavailable',
+    'page.evaluate: Target page, context or browser has been closed',
+    'page.evaluate: Timeout 30000ms exceeded.',
+    'page.evaluate: Error: crash reporter is unavailable',
+  ])('returns the failure "%s" as it is', (message) => {
+    const other = new Error(message);
 
     expect(describeReplayFailure(other)).toBe(other);
+  });
+
+  it('returns a value that is not an Error as it is', () => {
     expect(describeReplayFailure('Target crashed')).toBe('Target crashed');
   });
 });
