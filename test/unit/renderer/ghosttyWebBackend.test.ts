@@ -1839,6 +1839,24 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     },
   );
 
+  it('holds that frame once, for the first of two resizes that follow the flush', async () => {
+    const timeline = await replayAndRecordTimeline(
+      [
+        outputEvent(0, 0),
+        resizeEvent(1, 20),
+        resizeEvent(2, 21),
+        exitEvent(3, 22),
+      ],
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 0 },
+    );
+
+    const resizes = timeline.filter((entry) => entry.step === 'resize 100');
+    expect(resizes).toHaveLength(2);
+    // The hold after the first resize is the only time between the two.
+    expect((resizes[1]?.atMs ?? 0) - (resizes[0]?.atMs ?? 0)).toBe(16);
+    expect((resizes[0]?.atMs ?? 0) - (timeline[0]?.atMs ?? 0)).toBe(16);
+  });
+
   it.each([
     ['recorded', RECORDED],
     ['max-speed', MAX_SPEED],
