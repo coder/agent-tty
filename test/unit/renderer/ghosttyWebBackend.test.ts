@@ -326,10 +326,6 @@ describe('GhosttyWebBackend unit guards', () => {
         calls.push(`write ${String(dataChunks.length)}`);
         return Promise.resolve();
       },
-      notePaintedGraphemes: () => {
-        calls.push('note');
-        return Promise.resolve();
-      },
       checkPaintedGlyphs: () => Promise.resolve({}),
       readHarnessSnapshot: () =>
         Promise.resolve(
@@ -370,19 +366,92 @@ describe('GhosttyWebBackend unit guards', () => {
     // calls. A caller that watches for stalls sees progress after each call.
     expect(calls.slice(calls.indexOf('write 1000'))).toEqual([
       'write 1000',
-      'note',
       'report',
       'write 1000',
-      'note',
       'report',
       'write 501',
-      'note',
       'report',
     ]);
     expect(reports.slice(-3)).toEqual([
       { seq: 2_500, scheduledWaitMs: 0 },
       { seq: 2_500, scheduledWaitMs: 0 },
       { seq: 2_500, scheduledWaitMs: 0 },
+    ]);
+  });
+
+  it('reports progress between the resize call and the note that follow a resize event', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: (_page: object, cols: number, rows: number) => {
+        calls.push(`resize ${String(cols)}x${String(rows)}`);
+        return Promise.resolve();
+      },
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${dataChunks.join(',')}`);
+        return Promise.resolve();
+      },
+      notePaintedGraphemes: () => {
+        calls.push('note');
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 100,
+            rows: 30,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'first' },
+          },
+          {
+            seq: 1,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'resize',
+            payload: { cols: 100, rows: 30 },
+          },
+          {
+            seq: 2,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'second' },
+          },
+        ],
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+      (progress) => {
+        calls.push(
+          `report ${String(progress.seq)}/${String(progress.scheduledWaitMs)}`,
+        );
+      },
+    );
+
+    expect(calls.slice(calls.indexOf('resize 100x30') - 1)).toEqual([
+      'report 0/0',
+      'resize 100x30',
+      'report 1/0',
+      'note',
+      'report 1/0',
+      'write second',
+      'report 2/0',
     ]);
   });
 

@@ -532,6 +532,32 @@ describe('generateWebmExport', () => {
     expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'refuses a stall window of %s before it creates a backend',
+    async (stallWindowMs) => {
+      const mockBackend = createMockBackend();
+      const backendFactory = vi.fn(() => mockBackend.backend);
+
+      await expect(
+        generateWebmExport(
+          {
+            sessionId: 'session-01',
+            sessionDir: '/tmp/agent-tty/sessions/session-01',
+            manifest: createManifest(),
+            events: createEvents(),
+            outputPath: '/tmp/exports/recording-1-webm.webm',
+          },
+          { backendFactory, stallWindowMs },
+        ),
+      ).rejects.toThrow(
+        'stallWindowMs must be a positive number when provided',
+      );
+
+      expect(backendFactory).not.toHaveBeenCalled();
+      expect(mockBackend.replayWithTiming).not.toHaveBeenCalled();
+    },
+  );
+
   it('disposes the backend when finalizeVideo throws', async () => {
     const finalizeError = new Error('finalize failed');
     const finalizeVideo = vi.fn().mockRejectedValue(finalizeError);
@@ -803,11 +829,34 @@ describe('generateWebmExport stall watchdog', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each(['succeeded', 'failed'] as const)(
+    'starts no timer when a replay that already %s reports again',
+    async (ending) => {
+      let reportLate: (progress: ReplayProgress) => void = () => undefined;
+      const { outcome } = await startExport((onProgress) => {
+        reportLate = onProgress;
+        return ending === 'succeeded'
+          ? Promise.resolve(createReplayState())
+          : Promise.reject(new Error('replay failed'));
+      });
+
+      await outcome;
+      reportLate({ seq: 9, scheduledWaitMs: DAY_MS });
+
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it.each([
     { seq: 0.5, scheduledWaitMs: 0, message: 'seq must be an integer' },
     { seq: -2, scheduledWaitMs: 0, message: 'seq must be an integer' },
     { seq: 0, scheduledWaitMs: -1, message: 'scheduledWaitMs must be' },
     { seq: 0, scheduledWaitMs: Number.NaN, message: 'scheduledWaitMs must be' },
+    {
+      seq: 0,
+      scheduledWaitMs: Number.POSITIVE_INFINITY,
+      message: 'scheduledWaitMs must be',
+    },
   ])(
     'rejects a progress report of seq $seq and wait $scheduledWaitMs',
     async ({ seq, scheduledWaitMs, message }) => {
@@ -833,17 +882,24 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
   const DAY_MS = 24 * 60 * 60 * 1000;
   const WINDOW_MS = 5 * 60 * 1000;
 
-  type ReplayEvent = {
-    seq: number;
-    type: 'output' | 'input_text';
-    ts: string;
-    payload: { data: string };
-  };
+  type ReplayEvent =
+    | {
+        seq: number;
+        type: 'output' | 'input_text';
+        ts: string;
+        payload: { data: string };
+      }
+    | {
+        seq: number;
+        type: 'resize';
+        ts: string;
+        payload: { cols: number; rows: number };
+      };
 
   function event(
     seq: number,
     offsetMs: number,
-    type: ReplayEvent['type'] = 'output',
+    type: 'output' | 'input_text' = 'output',
   ): ReplayEvent {
     return {
       seq,
@@ -853,14 +909,25 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
     };
   }
 
-  // Exports `events` with the real replay loop. Each bridge call takes
-  // `bridgeCostMs` of fake time. Returns how long the replay took in fake
-  // time, or the error that stopped it.
+  function resizeEvent(seq: number, offsetMs: number): ReplayEvent {
+    return {
+      seq,
+      type: 'resize',
+      ts: new Date(BASE_TIME_MS + offsetMs).toISOString(),
+      payload: { cols: 100 + seq, rows: 30 },
+    };
+  }
+
+  // Exports `events` with the real replay loop. Each output bridge call takes
+  // `bridgeCostMs` of fake time, each resize call `resizeCostMs` and each note
+  // of the painted graphemes after a resize `noteCostMs`. Returns how long the
+  // replay took in fake time, or the error that stopped it.
   async function exportWithRealReplayLoop(
     events: ReplayEvent[],
     timingMode: 'recorded' | 'accelerated' | 'max-speed',
     bridgeCostMs: number,
     runForMs: number,
+    { resizeCostMs = 0, noteCostMs = 0 } = {},
   ): Promise<{ replayMs: number | undefined; error: unknown }> {
     mocks.buildReplayInput.mockReturnValue({
       sessionId: 'session-01',
@@ -875,6 +942,7 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
     });
     let finalizedAtMs: number | undefined;
     let startedAtMs = 0;
+    let resizeCalls = 0;
     const outcome = generateWebmExport(
       {
         sessionId: 'session-01',
@@ -896,15 +964,25 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
             isBooted: true,
             page: { isClosed: () => false },
             resizeBridge: () => {
-              startedAtMs = Date.now();
-              markReplayStarted();
-              return Promise.resolve();
+              resizeCalls += 1;
+              if (resizeCalls === 1) {
+                // The first call sizes the terminal before the replay starts.
+                startedAtMs = Date.now();
+                markReplayStarted();
+                return Promise.resolve();
+              }
+              return new Promise<void>((resolve) => {
+                setTimeout(resolve, resizeCostMs);
+              });
             },
             writeBatchBridge: () =>
               new Promise<void>((resolve) => {
                 setTimeout(resolve, bridgeCostMs);
               }),
-            notePaintedGraphemes: () => Promise.resolve(),
+            notePaintedGraphemes: () =>
+              new Promise<void>((resolve) => {
+                setTimeout(resolve, noteCostMs);
+              }),
             checkPaintedGlyphs: () => Promise.resolve({}),
             readHarnessSnapshot: () =>
               Promise.resolve({
@@ -979,13 +1057,15 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
 
   it.each([
     { timingMode: 'accelerated', eventCount: 7_401, bridgeCostMs: 50 },
-    { timingMode: 'max-speed', eventCount: 39_001, bridgeCostMs: 15 },
+    { timingMode: 'max-speed', eventCount: 39_001, bridgeCostMs: 200 },
   ] as const)(
     'exports a dense $timingMode recording whose replay runs far past its plan',
     async ({ timingMode, eventCount, bridgeCostMs }) => {
-      // An input event after each output event forces a flush, and each flush
-      // holds the frame, so the replay takes minutes for a recording that
-      // spans seconds.
+      // In accelerated mode an input event after each output event forces a
+      // flush, and each flush holds the frame. In max-speed mode the flushes
+      // are spread over the recorded span, about 2,300 of them here, and each
+      // one costs a slow bridge call. Either way the replay takes minutes for
+      // a recording that spans seconds.
       const events = Array.from({ length: eventCount }, (_, seq) =>
         event(seq, seq, seq % 2 === 0 ? 'output' : 'input_text'),
       );
@@ -1002,9 +1082,9 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
   );
 
   it('exports a max-speed recording whose output goes to the renderer in one flush', async () => {
-    // One flush is 40 bridge calls of 21 s each, 14 minutes in all. Each
-    // call is progress.
-    const events = Array.from({ length: 39_001 }, (_, seq) => event(seq, seq));
+    // Events with one timestamp share a flush. This flush is 40 bridge calls
+    // of 21 s each, 14 minutes in all. Each call is progress.
+    const events = Array.from({ length: 39_001 }, (_, seq) => event(seq, 0));
     const { replayMs, error } = await exportWithRealReplayLoop(
       events,
       'max-speed',
@@ -1014,6 +1094,28 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
 
     expect(error).toBeUndefined();
     expect(replayMs).toBeGreaterThan(WINDOW_MS);
+  });
+
+  it('exports a recording that resizes often while no page call outlasts the window', async () => {
+    // A resize is two page calls, the resize and the note of the graphemes
+    // on the screen. Each takes 160 s, so a resize takes longer than the
+    // window, and the report between the two calls keeps both under it.
+    const events = [
+      event(0, 0),
+      resizeEvent(1, 10),
+      resizeEvent(2, 20),
+      resizeEvent(3, 30),
+    ];
+    const { replayMs, error } = await exportWithRealReplayLoop(
+      events,
+      'recorded',
+      0,
+      60 * 60 * 1000,
+      { resizeCostMs: 160_000, noteCostMs: 160_000 },
+    );
+
+    expect(error).toBeUndefined();
+    expect(replayMs).toBeGreaterThan(3 * WINDOW_MS);
   });
 
   it('stops a replay whose renderer call hangs and names the last event it reached', async () => {

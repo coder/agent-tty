@@ -1669,6 +1669,11 @@ describe('record export command', () => {
       position: 'after event 1234',
     },
     {
+      lastSeq: 0,
+      timingMode: 'accelerated',
+      position: 'after event 0',
+    },
+    {
       lastSeq: -1,
       timingMode: 'max-speed',
       position: 'at the start of the replay',
@@ -1703,6 +1708,33 @@ describe('record export command', () => {
       expect(mocks.emitSuccess).not.toHaveBeenCalled();
     },
   );
+
+  it('keeps the requested output path and the stall error in the error of a stalled WebM replay', async () => {
+    const outputDirectory = await createTemporaryDirectory(
+      'agent-tty-record-export-stall-',
+    );
+    const out = join(outputDirectory, 'stalled.webm');
+    const stall = new WebmReplayStallError(300_000, 12, 'recorded');
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockRejectedValue(stall);
+
+    const failure: unknown = await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+      out,
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      details: { out },
+    });
+    expect((failure as { cause?: unknown }).cause).toBe(stall);
+  });
 
   it('keeps the generic message for other WebM export failures', async () => {
     mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');

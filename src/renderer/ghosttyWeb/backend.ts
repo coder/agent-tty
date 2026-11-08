@@ -822,6 +822,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentCols = event.payload.cols;
           this.currentRows = event.payload.rows;
           resizeEventCount += 1;
+          // The resize and the note that follows are two page calls. A
+          // report between them keeps each call a stretch of its own.
+          onProgress?.({ seq: event.seq, scheduledWaitMs: 0 });
           await this.notePaintedGraphemes(page);
           await waitForDelay(resolvedMinFrameHoldMs);
           break;
@@ -1741,7 +1744,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   /**
    * Writes the chunks of one flush into the page. With `notePainted`, the page
    * also notes the graphemes on the screen once the flush is written, in the
-   * call that ends the flush.
+   * call that ends the flush. `afterEachBatch` runs after each page call.
    */
   private async flushOutputBatch(
     page: Page,
@@ -1779,7 +1782,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           endsFlush,
           endsFlush && notePainted ? this.paintedNoteCap() : null,
         );
-        await afterEachBatch?.();
+        afterEachBatch?.();
       }
     } catch (error) {
       // The page still holds the chunks of the calls that did succeed. The
