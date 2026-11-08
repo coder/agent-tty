@@ -563,20 +563,22 @@ CreateLaunchesHost ==
                    hitUnrelated, diedUnrecorded, passedReused, hreused,
                    hitUnrelatedHost>>
 
-\* runCreateCommand's readiness loop gives up after 50 inspect RPCs that
-\* fail, which the model lets happen at any step after the start-up, since
-\* it has no clock. With HostChecksCreateFailed, create first writes the
-\* create-failed marker, an empty file written with no mkdir, so the write
-\* fails when gc removed the directory, and create goes on. Then it reads
-\* the manifest. With CreateStopsOnGiveUp, create sends its host SIGTERM
-\* and reports the error. HostGetsSigterm takes that SIGTERM as the host's
-\* one SIGTERM, and HostCrashes covers one that ends a host before it spawns
-\* the program. create writes nothing else: without a token only the host
-\* knows which group is the program's. Without the guard, create only
-\* reports the error. On Linux and macOS the manifest read changes nothing,
-\* so the model joins the marker write, the read and the SIGTERM. The
-\* marker write can also fail for a reason of its own, such as an antivirus
-\* lock on its temp file. Off Windows the SIGTERM then still stops the host.
+\* runCreateCommand's readiness wait gives up when its host process has
+\* exited, or after 30 s when a host that runs does not answer. The model
+\* lets that happen at any step after the start-up, since it has no clock
+\* and puts no condition on the host. With HostChecksCreateFailed, create
+\* first writes the create-failed marker, an empty file written with no
+\* mkdir, so the write fails when gc removed the directory, and create goes
+\* on. Then it reads the manifest. With CreateStopsOnGiveUp, create sends
+\* its host SIGTERM and reports the error. HostGetsSigterm takes that
+\* SIGTERM as the host's one SIGTERM, and HostCrashes covers one that ends a
+\* host before it spawns the program. create writes nothing else: without a
+\* token only the host knows which group is the program's. Without the
+\* guard, create only reports the error. On Linux and macOS the manifest
+\* read changes nothing, so the model joins the marker write, the read and
+\* the SIGTERM. The marker write can also fail for a reason of its own, such
+\* as an antivirus lock on its temp file. Off Windows the SIGTERM then still
+\* stops the host.
 CreateGivesUp ==
     /\ cpc = "done"
     /\ \E written \in BOOLEAN :

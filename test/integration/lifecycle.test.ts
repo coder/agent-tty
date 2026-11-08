@@ -51,6 +51,10 @@ import {
 
 const zombieLeader = resolve('test/fixtures/zombie-leader.py');
 const forkChain = resolve('test/fixtures/fork-chain.py');
+// A create waits up to 30 s for a host that runs and never listens. With the
+// monotonic clock 5 times as fast (test/fixtures/fast-clock.ts), a create
+// that waits for a held host gives up after about 6 s.
+const CREATE_DEADLINE_CLOCK_FACTOR = '5';
 
 function groupStates(group: number): string[] {
   return execFileSync('ps', ['-eo', 'pgid=,s='], { encoding: 'utf8' })
@@ -2053,9 +2057,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
             REPLAY_LOG: holdLog,
             REPLAY_RELEASE: release,
             REPLAY_HOLD: '_host:rename:/session.json:1:60000',
+            AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
               ...preloads,
             ].join(' '),
           },
@@ -2138,9 +2144,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
           REPLAY_LOG: holdLog,
           REPLAY_RELEASE: release,
           REPLAY_HOLD: '_host:open:/events.jsonl:1:60000',
+          AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
           NODE_OPTIONS: [
             process.env.NODE_OPTIONS ?? '',
             `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+            `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
             `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
           ].join(' '),
         },
@@ -2226,9 +2234,11 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
             REPLAY_LOG: holdLog,
             REPLAY_RELEASE: release,
             REPLAY_HOLD: `_host:mkdir:/${socketDirectory}:1:60000`,
+            AGENT_TTY_TEST_CLOCK_FACTOR: CREATE_DEADLINE_CLOCK_FACTOR,
             NODE_OPTIONS: [
               process.env.NODE_OPTIONS ?? '',
               `--import=${pathToFileURL(resolve('.agents/skills/verify-session-lifecycle/scripts/replay-hold.mjs')).href}`,
+              `--import=${pathToFileURL(resolve('test/fixtures/fast-clock.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/denied-autogroup.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/fake-win32-create.ts')).href}`,
               `--import=${pathToFileURL(resolve('test/fixtures/fail-manifest-read-after-marker.ts')).href}`,
@@ -2399,9 +2409,8 @@ describe('lifecycle integration', { timeout: 60_000 }, () => {
     // pid. Holding that write keeps create's manifest, with no childPid, for
     // the whole destroy. The hold matches the host's argv only, so the inner
     // CLI, which inherits it, runs at full speed. A held host never answers
-    // create, which gives up after about 5 s and sends it SIGTERM. On a slow
-    // runner that came before the inner destroy, so create is killed once it
-    // has written the manifest, which the host still reads after its creator
+    // create, which waits for it. The test kills create once it has written
+    // the manifest. The host still reads that manifest after its creator
     // died, and the destroy kills the held host.
     it('destroy --force before the host names the program prints its result', async () => {
       const out = join(testHome, 'early-destroy.json');

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createTemporarySessionDir } from '../../helpers.js';
 
+import type { ScreenshotOptions } from '../../../src/renderer/backend.js';
 import type { ScreenshotResult } from '../../../src/renderer/types.js';
 
 import {
@@ -214,6 +215,36 @@ describe('screenshot capture', () => {
 
     expect(observed.at(-1)?.options).toEqual({ showCursor: false });
     expect(falseResult.cursorVisible).toBe(false);
+  });
+
+  it('hands the replay progress callback to the backend, with or without showCursor', async () => {
+    const observed: ScreenshotOptions[] = [];
+    const onReplayProgress = (): void => undefined;
+
+    for (const [index, showCursor] of [undefined, true].entries()) {
+      const sessionId = `session-progress-${String(index)}`;
+      const backend = createFakeBackend({
+        onScreenshot: (_outputPath, screenshotOptions) => {
+          observed.push(screenshotOptions ?? {});
+        },
+        resultOverrides: { sessionId },
+      });
+
+      await captureScreenshotResult({
+        backend,
+        sessionDir: await createSessionDir(sessionId),
+        profileName: 'reference-dark',
+        expectedSessionId: sessionId,
+        onReplayProgress,
+        ...(showCursor === undefined ? {} : { showCursor }),
+      });
+    }
+
+    expect(observed).toEqual([
+      { onReplayProgress },
+      { showCursor: true, onReplayProgress },
+    ]);
+    expect(observed[0]?.onReplayProgress).toBe(onReplayProgress);
   });
 
   it('rejects empty sessionDir, profileName, or expectedSessionId before invoking the backend', async () => {

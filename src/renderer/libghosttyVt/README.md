@@ -11,7 +11,7 @@ This directory holds the `libghostty-vt` renderer backend. `LibghosttyVtBackend`
   - `boot()` loads the native module on first call. Concurrent calls share one boot promise [backend.ts:LibghosttyVtBackend.boot].
   - `replayTo(input)` feeds `output` events and applies `resize` events. It skips input, marker, run, signal and exit events [backend.ts:LibghosttyVtBackend.replayTo].
   - `snapshot(options?)` returns a `SemanticSnapshot` parsed by `SemanticSnapshotSchema` [backend.ts:LibghosttyVtBackend.snapshot].
-  - `screenshot(outputPath, options?)` boots a fallback backend, replays the last replay input into it, takes the screenshot, and disposes the fallback [backend.ts:LibghosttyVtBackend.screenshot].
+  - `screenshot(outputPath, options?)` boots a fallback backend, replays the last replay input into it in slices (`replayInSlices`), takes the screenshot, and disposes the fallback. It calls `options.onReplayProgress` after the fallback has booted and after each `replayTo` call [backend.ts:LibghosttyVtBackend.screenshot].
   - `encodeMouse(input)` maps a cell, button and modifiers to the native `encodeMouse` with a pixel geometry of `cellWidth` and `cellHeight` (default 1) per cell, and returns the bytes [backend.ts:LibghosttyVtBackend.encodeMouse].
   - `getVisibleText()` and `dispose()` [backend.ts:LibghosttyVtBackend.dispose].
 - `LibghosttyVtBackendOptions`: `initialCols`, `initialRows`, `scrollbackLimit`, `loadNative`, `fallbackFactory` and `logger` [backend.ts:LibghosttyVtBackendOptions]. Re-exported as a type by `index.ts`.

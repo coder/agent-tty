@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   cleanupHome,
+  createBashSession,
   createSession,
   destroySession,
   readEvents,
@@ -122,7 +123,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('returns immediately with --no-wait', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(500);
 
     const result = runCli(
@@ -148,7 +149,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('reads command from --file', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(500);
 
     const scriptPath = join(testHome, 'test-script.sh');
@@ -171,7 +172,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('handles multiline command input', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(1000);
 
     const result = runCli(
@@ -198,7 +199,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('waits for the command to complete before reporting success', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(1000);
 
     const start = Date.now();
@@ -247,7 +248,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('records input_run event in the event log', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(500);
 
     const result = runCli(
@@ -329,7 +330,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('returns timedOut when run completion is not observed within timeout', async () => {
-    sessionId = createSession(testHome, ['/bin/bash']);
+    sessionId = createBashSession(testHome);
     await sleep(500);
 
     const result = runCli(
@@ -506,13 +507,9 @@ describe('run command integration', { timeout: 45_000 }, () => {
   );
 
   it('does not log postamble cursor controls when shell echo is disabled', async () => {
-    sessionId = createSession(
-      testHome,
-      ['/bin/bash', '--noprofile', '--norc'],
-      {
-        cols: WIDE_ARTIFACT_PROOF_COLS,
-      },
-    );
+    sessionId = createBashSession(testHome, {
+      cols: WIDE_ARTIFACT_PROOF_COLS,
+    });
     await sleep(1000);
 
     const disableEchoResult = runCli(
@@ -590,7 +587,7 @@ describe('run command integration', { timeout: 45_000 }, () => {
   });
 
   it('records structured run completion without leaking sentinel text to artifacts', async () => {
-    sessionId = createSession(testHome, ['/bin/bash'], {
+    sessionId = createBashSession(testHome, {
       cols: WIDE_ARTIFACT_PROOF_COLS,
     });
     await sleep(1000);

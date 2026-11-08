@@ -8,7 +8,7 @@ This directory turns a renderer screenshot into a stored session artifact. `capt
 
 - `CaptureScreenshotBackend`: `Pick<RendererBackend, 'screenshot'>`, so callers can only reach `screenshot()` [capture.ts:CaptureScreenshotBackend].
 - `CapturedScreenshotResult`: `ScreenshotResult` (from `src/protocol/messages.ts`) with a required `sha256` [capture.ts:CapturedScreenshotResult].
-- `CaptureScreenshotResultOptions`: `backend`, `sessionDir`, `profileName`, `expectedSessionId` and optional `showCursor` [capture.ts:CaptureScreenshotResultOptions].
+- `CaptureScreenshotResultOptions`: `backend`, `sessionDir`, `profileName`, `expectedSessionId`, and optional `showCursor` and `onReplayProgress`, which go to the backend as screenshot options [capture.ts:CaptureScreenshotResultOptions].
 - `parseScreenshotResult(rawResult, message?)` validates a value with `ScreenshotResultSchema` from `src/protocol/schemas.ts` through `parseValidatedResult` [capture.ts:parseScreenshotResult].
 - `captureScreenshotResult(options)` captures, stores and records one screenshot and returns the `CapturedScreenshotResult` [capture.ts:captureScreenshotResult].
 

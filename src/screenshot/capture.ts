@@ -3,7 +3,10 @@ import { rm } from 'node:fs/promises';
 import { ulid } from 'ulid';
 
 import type { ScreenshotResult } from '../protocol/messages.js';
-import type { RendererBackend } from '../renderer/backend.js';
+import type {
+  RendererBackend,
+  ScreenshotOptions,
+} from '../renderer/backend.js';
 
 import { ScreenshotResultSchema } from '../protocol/schemas.js';
 import { parseValidatedResult } from '../protocol/validation.js';
@@ -41,6 +44,8 @@ export interface CaptureScreenshotResultOptions {
   profileName: string;
   expectedSessionId: string;
   showCursor?: boolean;
+  /** See `ScreenshotOptions.onReplayProgress`. */
+  onReplayProgress?: () => void;
 }
 
 export function parseScreenshotResult(
@@ -67,11 +72,19 @@ export async function captureScreenshotResult(
   );
 
   try {
+    const screenshotOptions: ScreenshotOptions = {
+      ...(options.showCursor === undefined
+        ? {}
+        : { showCursor: options.showCursor }),
+      ...(options.onReplayProgress === undefined
+        ? {}
+        : { onReplayProgress: options.onReplayProgress }),
+    };
     const rendererResult = await options.backend.screenshot(
       temporaryOutputPath,
-      options.showCursor === undefined
+      Object.keys(screenshotOptions).length === 0
         ? undefined
-        : { showCursor: options.showCursor },
+        : screenshotOptions,
     );
 
     invariant(

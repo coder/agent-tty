@@ -92,10 +92,11 @@ function createFixtureSession(
   home: string,
   createdSessionIds: string[],
   appName: 'hello-prompt' | 'color-grid' | 'alt-screen-demo' | 'crash-demo',
+  fixtureArgs: string[] = [],
 ): string {
   const env = testEnv(home);
   const createEnvelope = runCliEnvelope<CreateResult>(
-    ['create', '--', ...fixtureCommand(appName)],
+    ['create', '--', ...fixtureCommand(appName), ...fixtureArgs],
     env,
   );
 
@@ -190,10 +191,14 @@ describe('export fixture e2e', { timeout: 180_000 }, () => {
 
   it('captures a color-grid screenshot with a non-trivial PNG artifact', async () => {
     const env = testEnv(testHome);
+    // `wait --idle-ms` refuses a session whose program has exited, and the
+    // default fixture exits 1.2 s after its output. A slow CLI start would
+    // miss that window, so keep the program running until the test ends.
     const sessionId = createFixtureSession(
       testHome,
       createdSessionIds,
       'color-grid',
+      ['--wait-input-before-exit'],
     );
 
     waitForIdle(sessionId, env, 5_000);

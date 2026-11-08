@@ -19,3 +19,8 @@ export const PROGRAM_RECORD_FILENAME = 'program.json';
 export const HOST_RECORD_FILENAME = 'host.json';
 export const DESTROY_MARKER_FILENAME = 'destroyed';
 export const CREATE_FAILED_MARKER_FILENAME = 'create-failed';
+// The host watches for that marker for this long after its start-up check,
+// while its creator runs. A create ends well within this time: its readiness
+// wait ends at 30 s (READINESS_DEADLINE_MS in create.ts) and its marker
+// retries take about 5 s at most.
+export const CREATE_FAILED_WATCH_MAX_MS = 60_000;
