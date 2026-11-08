@@ -57,13 +57,14 @@ describe('describeReplayFailure', () => {
   });
 
   // Real Playwright and harness messages that are not a crash. A looser
-  // pattern (`/Target/`, `/crash/i`, or one that adds the closed-page text)
-  // would call them one and release a healthy page.
+  // pattern (`/Target/`, `/crash/i`, `/crashed/`, or one that adds the
+  // closed-page text) would call them one and release a healthy page.
   it.each([
     'ghostty-web bridge write() is unavailable',
     'page.evaluate: Target page, context or browser has been closed',
     'page.evaluate: Timeout 30000ms exceeded.',
     'page.evaluate: Error: crash reporter is unavailable',
+    'page.evaluate: Error: worker crashed',
   ])('returns the failure "%s" as it is', (message) => {
     const other = new Error(message);
 
