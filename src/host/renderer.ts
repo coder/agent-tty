@@ -1,8 +1,10 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
+import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { RendererBackend } from '../renderer/backend.js';
 import type { RendererName } from '../renderer/names.js';
+import { GhosttyWebCrashedError } from '../renderer/ghosttyWeb/index.js';
 import { hashProfile } from '../renderer/profiles.js';
 import { replayInSlices } from '../renderer/replaySlices.js';
 import type { RenderProfileConfig, ReplayInput } from '../renderer/types.js';
@@ -26,6 +28,19 @@ function assertNonEmptyString(
     typeof value === 'string' && value.length > 0,
     `${label} must be a non-empty string`,
   );
+}
+
+// A command on a live session fails with REPLAY_ERROR when the ghostty-web page
+// crashes, as the same command on an exited session does. The crash is
+// deterministic, so RPC_ERROR (retryable) would send callers into retries.
+function rethrowCrashAsReplayError(error: unknown): never {
+  if (error instanceof GhosttyWebCrashedError) {
+    throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
+      message: error.message,
+      cause: error,
+    });
+  }
+  throw error;
 }
 
 function assertAbsolutePath(pathValue: string, label: string): void {
@@ -152,7 +167,7 @@ export class HostRendererManager {
         this.reportProgress();
       });
     });
-    return queued.finally(() => {
+    return queued.catch(rethrowCrashAsReplayError).finally(() => {
       if (listener !== null) {
         this.progressListeners.delete(listener);
       }

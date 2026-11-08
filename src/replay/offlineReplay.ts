@@ -1,5 +1,6 @@
 import { basename, isAbsolute, resolve } from 'node:path';
 
+import type { CliError } from '../cli/errors.js';
 import { buildReplayInput } from '../host/replay.js';
 import {
   EventLogTooLargeError,
@@ -8,6 +9,7 @@ import {
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { EventRecord, SessionRecord } from '../protocol/schemas.js';
 import type { RendererBackend } from '../renderer/backend.js';
+import { GhosttyWebCrashedError } from '../renderer/ghosttyWeb/index.js';
 import {
   DEFAULT_RENDERER_NAME,
   resolveRendererName,
@@ -130,6 +132,15 @@ async function readOfflineReplayInput(
   }
 }
 
+function replayRendererError(sessionId: string, error: unknown): CliError {
+  return makeCliError(ERROR_CODES.REPLAY_ERROR, {
+    message: `Failed to boot or replay renderer for session ${sessionId}.${
+      error instanceof GhosttyWebCrashedError ? ` ${error.message}` : ''
+    }`,
+    cause: error,
+  });
+}
+
 export async function withOfflineReplayRenderer<T>(
   options: {
     sessionDir: string;
@@ -178,13 +189,20 @@ export async function withOfflineReplayRenderer<T>(
       await backend.boot();
       await backend.replayTo(replayInput);
     } catch (error) {
-      throw makeCliError(ERROR_CODES.REPLAY_ERROR, {
-        message: `Failed to boot or replay renderer for session ${sessionId}.`,
-        cause: error,
-      });
+      throw replayRendererError(sessionId, error);
     }
 
-    return await run({ manifest, replayInput, backend });
+    try {
+      return await run({ manifest, replayInput, backend });
+    } catch (error) {
+      // A libghostty-vt screenshot replays the log a second time, in a
+      // ghostty-web renderer that it boots inside `run`. That page can crash
+      // here, after the replay above, and must fail like the replay does.
+      if (error instanceof GhosttyWebCrashedError) {
+        throw replayRendererError(sessionId, error);
+      }
+      throw error;
+    }
   } finally {
     await backend.dispose();
   }
