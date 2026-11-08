@@ -138,12 +138,19 @@ const WASM_CONTENT_TYPE = 'application/wasm';
 
 const MAX_REPLAY_BATCH_SIZE = 1000;
 /**
- * A max-speed replay makes at most about this many flushes, however long the
- * recording is. A flush costs one animation frame, one page call and one scan
- * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 112 ms at 200x60 in the
- * median of five sparse-log runs (host load 40 to 100). The limit then takes
- * 1 to 4.5 minutes, under the 5 minutes that a WebM export allows its replay.
- * The video has 25 frames per second, so this many flushes fill 96 s of video.
+ * Recorded time ends at most about this many flushes of a max-speed replay,
+ * however long the recording is. A resize ends one more flush, and this limit
+ * does not count it, so a log with many resizes makes more. A flush costs one
+ * animation frame, one page call and one scan of the screen, and that cost
+ * grows with the terminal size and the load of the host. Measured on PR 358
+ * (host CPU pressure 15 to 44 %): 400 outputs 20 ms apart took 18 to 20 ms per
+ * flush at 80x24. A worst-case log of 2,400 full-screen repaints 17 ms apart
+ * at 200x60 took 287 s (120 ms per flush) in two runs, and 368 s (153 ms per
+ * flush) in a run of a verifier at pressure 23 to 38 %. A WebM export allows
+ * its replay 5 minutes (REPLAY_TIMEOUT_MS), so a loaded host can pass that
+ * limit at a large terminal size and fail the export. PR 356 replaces that
+ * limit with a stall window. The video has 25 frames per second, so this many
+ * flushes fill 96 s of video.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
@@ -689,8 +696,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     // Output shows once the next event is this far after the batch's first
     // output. It is at least 1 ms: events with one timestamp share a flush.
     // Max-speed has no schedule that bounds its replay time, so it also
-    // spreads a fixed number of flushes over the recorded span: a sparse
-    // recording then costs the same number of frames as a dense one.
+    // spreads a fixed number of its flushes over the recorded span: a sparse
+    // recording then costs about the same number of frames as a dense one. A
+    // resize ends one more flush, and the budget does not count it.
     const minSplitMs = Math.max(
       1,
       resolvedMinFrameHoldMs,
