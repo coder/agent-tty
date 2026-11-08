@@ -724,6 +724,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       }
       lastFlushUnheld = !holdFrame;
     };
+    const holdAfterUnheldFlush = async (): Promise<void> => {
+      if (lastFlushUnheld) {
+        lastFlushUnheld = false;
+        await waitForDelay(resolvedMinFrameHoldMs);
+      }
+    };
 
     // Events that change no pixel end a flush in recorded and accelerated
     // mode, where the pause before them is part of the video. Max-speed has no
@@ -809,10 +815,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           // A flush that the timestamp check made earlier has no hold, and
           // the resize then finds nothing pending. The screen before the
           // resize still needs its frame hold to reach the video.
-          if (lastFlushUnheld) {
-            await waitForDelay(resolvedMinFrameHoldMs);
-            lastFlushUnheld = false;
-          }
+          await holdAfterUnheldFlush();
           assertPositiveInteger(
             event.payload.cols,
             'resize event cols must be a positive integer',
