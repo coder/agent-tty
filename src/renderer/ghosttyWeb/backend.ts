@@ -719,7 +719,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       await this.flushOutputBatch(
         page,
         pendingOutputChunks,
-        () => onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs: 0 }),
+        () => {
+          onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs: 0 });
+          return Promise.resolve();
+        },
         true,
       );
       pendingOutputChunks = [];
@@ -1749,7 +1752,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async flushOutputBatch(
     page: Page,
     dataChunks: string[],
-    afterEachBatch?: () => void,
+    afterEachBatch?: () => Promise<void>,
     notePainted = false,
   ): Promise<void> {
     invariant(
@@ -1782,7 +1785,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           endsFlush,
           endsFlush && notePainted ? this.paintedNoteCap() : null,
         );
-        afterEachBatch?.();
+        await afterEachBatch?.();
       }
     } catch (error) {
       // The page still holds the chunks of the calls that did succeed. The
