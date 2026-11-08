@@ -10,6 +10,7 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { probeLibghosttyVt } from '../../src/renderer/readiness.js';
 import {
   cleanupHome,
   createSession,
@@ -25,6 +26,7 @@ const CLI_TIMEOUT_MS = 60_000;
 // cluster faults the WASM module. Chromium then kills the page.
 const CRASH_OUTPUT = 'a\\u0301\\u001bc\\u001b[?47ho';
 const WRITE_CRASH_OUTPUT = `process.stdout.write('${CRASH_OUTPUT}');`;
+const hasLibghosttyVt = (await probeLibghosttyVt()).available;
 const CRASH_EXPLANATION =
   "ghostty-web crashed while it replayed this session's output.";
 
@@ -137,5 +139,64 @@ describe.skipIf(process.platform !== 'linux')(
         `Failed to export session "${sessionId}" as webm. ${CRASH_EXPLANATION}`,
       );
     });
+
+    // A libghostty-vt screenshot replays the log a second time, in a
+    // ghostty-web page that it boots for the screenshot. That page crashes too.
+    it.skipIf(!hasLibghosttyVt)(
+      'reports the crash behind a live libghostty-vt screenshot as REPLAY_ERROR',
+      () => {
+        sessionId = createSession(testHome, [
+          process.execPath,
+          '-e',
+          `${WRITE_CRASH_OUTPUT} process.stdin.resume();`,
+        ]);
+
+        const result = runCli(
+          ['screenshot', sessionId, '--renderer', 'libghostty-vt', '--json'],
+          { AGENT_TTY_HOME: testHome },
+          CLI_TIMEOUT_MS,
+        );
+
+        expect(result.status).toBe(10);
+        const error = parseError(result.stdout);
+        expect(error.code).toBe('REPLAY_ERROR');
+        expect(error.retryable).toBe(false);
+        expect(error.message).toContain(CRASH_EXPLANATION);
+      },
+    );
+
+    // The CLI replays the log of an exited session itself. The ghostty-web
+    // page of the screenshot crashes after that replay, inside the operation.
+    it.skipIf(!hasLibghosttyVt)(
+      'reports the crash behind a libghostty-vt screenshot of an exited session as REPLAY_ERROR',
+      () => {
+        sessionId = createSession(testHome, [
+          process.execPath,
+          '-e',
+          WRITE_CRASH_OUTPUT,
+        ]);
+        const env = { AGENT_TTY_HOME: testHome };
+        const exited = runCli(
+          ['wait', sessionId, '--exit', '--timeout-ms', '20000', '--json'],
+          env,
+          CLI_TIMEOUT_MS,
+        );
+        expect(exited.status).toBe(0);
+
+        const result = runCli(
+          ['screenshot', sessionId, '--renderer', 'libghostty-vt', '--json'],
+          env,
+          CLI_TIMEOUT_MS,
+        );
+
+        expect(result.status).toBe(10);
+        const error = parseError(result.stdout);
+        expect(error.code).toBe('REPLAY_ERROR');
+        expect(error.retryable).toBe(false);
+        expect(error.message).toMatch(
+          /^Failed to boot or replay renderer for session \w+\. ghostty-web crashed while it replayed this session's output\./u,
+        );
+      },
+    );
   },
 );
