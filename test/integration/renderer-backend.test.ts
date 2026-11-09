@@ -1073,7 +1073,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
 
       expect(
         await page.evaluate(
-          `window.__agentTty.getVisibleText().split('\\\\n')[0]`,
+          `window.__agentTty.getVisibleText().split('\\n')[0]`,
         ),
       ).toBe('ok');
     });
