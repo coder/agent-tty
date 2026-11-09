@@ -748,10 +748,11 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let pendingSinceTimestampMs: number | null = null;
     let scheduleStartedAtMs = 0;
     let scheduledElapsedMs = 0;
-    // Max-speed has no pauses, so the screen before a resize reaches the video
-    // only if it stays on the page for one video frame. A frame hold of 16 ms
-    // is shorter than that, and the recorder then misses the screen in some
-    // runs. Recorded and accelerated replays keep their pauses and their hold.
+    // Max-speed has no pauses, so a screen that stays on the page for less
+    // than one video frame before a resize can be missing from the video. A
+    // frame hold of 16 ms is shorter than that, and the recorder misses the
+    // screen in some runs. Recorded and accelerated replays keep their pauses
+    // and their hold.
     const preResizeHoldMs =
       timing.mode === 'max-speed'
         ? Math.max(resolvedMinFrameHoldMs, VIDEO_FRAME_MS)
