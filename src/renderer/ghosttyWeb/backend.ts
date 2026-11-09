@@ -150,8 +150,8 @@ const MAX_REPLAY_BATCH_SIZE = 1000;
  * 44 %, and 368 s (153 ms per flush) in a run of a verifier at pressure 23 to
  * 38 %. A WebM export allows its replay 5 minutes (REPLAY_TIMEOUT_MS), so a
  * loaded host can pass that limit at a large terminal size and fail the
- * export. PR 356 replaces that limit with a stall window. The video has 25
- * frames per second, so this many flushes fill 96 s of video.
+ * export. The video has 25 frames per second, so this many flushes fill 96 s
+ * of video.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
