@@ -82,6 +82,13 @@ interface GhosttyServedAsset extends GhosttyRequestAsset {
 interface GhosttyBrowserBridge {
   isReady?: () => boolean;
   write?: (data: string) => Promise<void> | void;
+  writeBatch?: (
+    chunks: string[],
+    endsFlush?: boolean,
+    paintedCap?: number | null,
+  ) => Promise<string | null> | string | null;
+  discardHeldChunks?: () => void;
+  notePaintedGraphemes?: (cap: number) => void;
   resize?: (cols: number, rows: number) => Promise<void> | void;
   setCursorVisible?: (visible: boolean) => Promise<void> | void;
   getSnapshot?: (options?: SnapshotOptions) => GhosttyHarnessSnapshot;
@@ -131,11 +138,42 @@ const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 const WASM_CONTENT_TYPE = 'application/wasm';
 
 const MAX_REPLAY_BATCH_SIZE = 1000;
+/**
+ * A max-speed replay makes at most about this many flushes, however long the
+ * recording is. A flush costs one animation frame, one page call and one scan
+ * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 112 ms at 200x60 in the
+ * median of five sparse-log runs (host load 40 to 100). The limit then takes
+ * 1 to 4.5 minutes, under the 5 minutes that a WebM export allows its replay.
+ * The video has 25 frames per second, so this many flushes fill 96 s of video.
+ */
+const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
 
 let servedAssetsPromise: Promise<
   ReadonlyMap<string, GhosttyServedAsset>
 > | null = null;
+
+/**
+ * Recorded time between the first and the last event that a replay applies:
+ * the seqs above `afterSeq`, up to the target. It is 0 when a timestamp does
+ * not parse. The replay loop rejects such a timestamp itself.
+ */
+function recordedSpanMs(input: ReplayInput, afterSeq: number): number {
+  let firstMs: number | undefined;
+  let lastMs = 0;
+  for (const event of input.events) {
+    if (event.seq <= afterSeq) {
+      continue;
+    }
+    if (event.seq > input.targetSeq) {
+      break;
+    }
+    lastMs = Date.parse(event.ts);
+    firstMs ??= lastMs;
+  }
+  const spanMs = lastMs - (firstMs ?? lastMs);
+  return Number.isFinite(spanMs) && spanMs > 0 ? spanMs : 0;
+}
 
 async function closeServer(server: Server): Promise<void> {
   if (!server.listening) {
@@ -668,6 +706,18 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       );
     }
 
+    // Output shows once the next event is this far after the batch's first
+    // output. It is at least 1 ms: events with one timestamp share a flush.
+    // Max-speed has no schedule that bounds its replay time, so it also
+    // spreads a fixed number of flushes over the recorded span: a sparse
+    // recording then costs the same number of frames as a dense one.
+    const minSplitMs = Math.max(
+      1,
+      resolvedMinFrameHoldMs,
+      timing.mode === 'max-speed'
+        ? recordedSpanMs(input, this.lastAppliedSeq) / MAX_SPEED_FRAME_BUDGET
+        : 0,
+    );
     let outputEventCount = 0;
     let previousEventSeq = -1;
     let previousProcessedEventTimestampMs: number | null = null;
@@ -679,17 +729,28 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let scheduleStartedAtMs = 0;
     let scheduledElapsedMs = 0;
 
-    const flushOutputBatch = async (): Promise<void> => {
+    const flushOutputBatch = async (holdFrame = true): Promise<void> => {
       if (pendingOutputChunks.length === 0) {
         return;
       }
 
-      await this.flushOutputBatch(page, pendingOutputChunks, () =>
-        this.notePaintedGraphemes(page),
-      );
+      await this.flushOutputBatch(page, pendingOutputChunks, undefined, true);
       pendingOutputChunks = [];
       pendingSinceTimestampMs = null;
-      await waitForDelay(resolvedMinFrameHoldMs);
+      if (holdFrame) {
+        await waitForDelay(resolvedMinFrameHoldMs);
+      }
+    };
+
+    // Events that change no pixel end a flush in recorded and accelerated
+    // mode, where the pause before them is part of the video. Max-speed has no
+    // pauses: a flush at each of them would cost one frame per event. So only
+    // recorded time ends a max-speed flush, and output on both sides of such
+    // an event shares a flush when it is less than one minimum split apart.
+    const flushBeforeNonVisualEvent = async (): Promise<void> => {
+      if (timing.mode !== 'max-speed') {
+        await flushOutputBatch();
+      }
     };
 
     for (const event of input.events) {
@@ -723,19 +784,22 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           'replay event timestamps must be ordered non-decreasingly',
         );
         scheduledElapsedMs += computeInterEventDelay(interEventDelayMs);
-        // Output shows once its batch is a frame hold old, unless the replay
-        // runs behind the schedule: then batches grow until it catches up, so
-        // slow flushes lower the frame rate instead of stretching the video.
-        // Max-speed keeps one batch per run of output events, so its frame
-        // holds cannot outlast the export timeout.
+        // Output shows once its batch is a minimum split old, unless the
+        // replay runs behind the schedule: then batches grow until it catches
+        // up, so slow flushes lower the frame rate instead of stretching the
+        // video. Max-speed has no schedule to fall behind. It flushes once per
+        // minimum split of recorded time at most, within the frame budget.
+        // The frame wait of such a flush is already its frame, so max-speed
+        // holds only after a flush that ends the replay or comes before a
+        // resize (a resize is followed by a hold too): a hold after every
+        // flush would export 30 ms steps slower than they ran.
         if (
-          timing.mode !== 'max-speed' &&
           pendingSinceTimestampMs !== null &&
-          eventTimestampMs - pendingSinceTimestampMs >=
-            resolvedMinFrameHoldMs &&
-          performance.now() - scheduleStartedAtMs <= scheduledElapsedMs
+          eventTimestampMs - pendingSinceTimestampMs >= minSplitMs &&
+          (timing.mode === 'max-speed' ||
+            performance.now() - scheduleStartedAtMs <= scheduledElapsedMs)
         ) {
-          await flushOutputBatch();
+          await flushOutputBatch(timing.mode !== 'max-speed');
         }
         // Waiting for the event's place on the schedule lets frame holds and
         // bridge calls use up time that the recording spent idle.
@@ -776,7 +840,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           break;
         }
         case 'marker': {
-          await flushOutputBatch();
+          await flushBeforeNonVisualEvent();
           break;
         }
         case 'input_text':
@@ -787,7 +851,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         case 'run_complete':
         case 'signal':
         case 'exit': {
-          await flushOutputBatch();
+          await flushBeforeNonVisualEvent();
           break;
         }
         default: {
@@ -1019,38 +1083,37 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         return;
       }
       await page.evaluate((cap) => {
-        const scope = globalThis as GhosttyBrowserGlobal;
-        const bridge = scope.__agentTty;
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
         if (
           bridge === undefined ||
-          typeof bridge.getCellGraphemes !== 'function'
+          typeof bridge.notePaintedGraphemes !== 'function'
         ) {
           throw new Error(
-            'ghostty-web bridge getCellGraphemes() is unavailable',
+            'ghostty-web bridge notePaintedGraphemes() is unavailable',
           );
         }
-        scope.__agentTtyPainted ??= { seen: new Set(), complete: true };
-        const painted = scope.__agentTtyPainted;
-        for (const row of bridge.getCellGraphemes()) {
-          for (const grapheme of row) {
-            if (grapheme === '' || painted.seen.has(grapheme)) {
-              continue;
-            }
-            if (painted.seen.size < cap) {
-              painted.seen.add(grapheme);
-            } else {
-              painted.complete = false;
-            }
-          }
-        }
+        bridge.notePaintedGraphemes(cap);
       }, MAX_CACHED_GLYPH_PROBES);
     } catch (error) {
-      this.paintedNoteFailed = true;
-      this.logger.debug(
-        'Missing-glyph note failed; the record export result omits missingGlyphs',
+      this.failPaintedNote(
         error instanceof Error ? error.message : String(error),
       );
     }
+  }
+
+  private failPaintedNote(message: string): void {
+    this.paintedNoteFailed = true;
+    this.logger.debug(
+      'Missing-glyph note failed; the record export result omits missingGlyphs',
+      message,
+    );
+  }
+
+  /** The cap that a flush passes to the page to note its painted graphemes. */
+  private paintedNoteCap(): number | null {
+    return this.paintedNoteFailed || this.glyphCheck() === null
+      ? null
+      : MAX_CACHED_GLYPH_PROBES;
   }
 
   public async recordedMissingGlyphs(): Promise<RecordedGlyphFields> {
@@ -1688,32 +1751,70 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     ]);
   }
 
+  /**
+   * Writes the chunks of one flush into the page. With `notePainted`, the page
+   * also notes the graphemes on the screen once the flush is written, in the
+   * call that ends the flush.
+   */
   private async flushOutputBatch(
     page: Page,
     dataChunks: string[],
     afterEachBatch?: () => Promise<void>,
+    notePainted = false,
   ): Promise<void> {
     invariant(
       dataChunks.length > 0,
       'flushOutputBatch requires at least one data chunk',
     );
 
-    for (
-      let batchStart = 0;
-      batchStart < dataChunks.length;
-      batchStart += MAX_REPLAY_BATCH_SIZE
-    ) {
-      const batch = dataChunks.slice(
-        batchStart,
-        batchStart + MAX_REPLAY_BATCH_SIZE,
+    try {
+      for (
+        let batchStart = 0;
+        batchStart < dataChunks.length;
+        batchStart += MAX_REPLAY_BATCH_SIZE
+      ) {
+        const batch = dataChunks.slice(
+          batchStart,
+          batchStart + MAX_REPLAY_BATCH_SIZE,
+        );
+        invariant(batch.length > 0, 'flushOutputBatch batch must not be empty');
+        invariant(
+          batch.length <= MAX_REPLAY_BATCH_SIZE,
+          'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
+        );
+        // The page holds the batches of a flush until the last one. Then it
+        // writes them all and waits for one frame.
+        const endsFlush =
+          batchStart + MAX_REPLAY_BATCH_SIZE >= dataChunks.length;
+        await this.writeBatchBridge(
+          page,
+          batch,
+          endsFlush,
+          endsFlush && notePainted ? this.paintedNoteCap() : null,
+        );
+        await afterEachBatch?.();
+      }
+    } catch (error) {
+      // The page still holds the chunks of the calls that did succeed. The
+      // backend stays in use after a failed replay, and a retry would meet
+      // them: its output would follow them, and its resize would be refused.
+      await this.discardHeldChunks(page);
+      throw error;
+    }
+  }
+
+  private async discardHeldChunks(page: Page): Promise<void> {
+    try {
+      await page.evaluate(() => {
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
+        bridge?.discardHeldChunks?.();
+      });
+    } catch (error) {
+      // A page that fails here is as broken as the call that failed first.
+      this.logger.debug(
+        'Dropping the held chunks of a failed flush failed',
+        error instanceof Error ? error.message : String(error),
       );
-      invariant(batch.length > 0, 'flushOutputBatch batch must not be empty');
-      invariant(
-        batch.length <= MAX_REPLAY_BATCH_SIZE,
-        'flushOutputBatch batch size must respect MAX_REPLAY_BATCH_SIZE',
-      );
-      await this.writeBatchBridge(page, batch);
-      await afterEachBatch?.();
     }
   }
 
@@ -1797,6 +1898,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async writeBatchBridge(
     page: Page,
     dataChunks: string[],
+    endsFlush = true,
+    paintedCap: number | null = null,
   ): Promise<void> {
     invariant(
       dataChunks.length > 0,
@@ -1810,16 +1913,26 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       assertString(chunk, 'bridge batch write chunk must be a string');
     }
 
-    await page.evaluate(async (chunks: string[]) => {
-      const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
-      if (bridge === undefined || typeof bridge.write !== 'function') {
-        throw new Error('ghostty-web bridge write() is unavailable');
-      }
+    const noteError = await page.evaluate(
+      async ([chunks, batchEndsFlush, batchPaintedCap]: readonly [
+        string[],
+        boolean,
+        number | null,
+      ]) => {
+        const bridge = (globalThis as GhosttyBrowserGlobal).__agentTty;
+        if (bridge === undefined || typeof bridge.writeBatch !== 'function') {
+          throw new Error('ghostty-web bridge writeBatch() is unavailable');
+        }
 
-      for (const chunk of chunks) {
-        await bridge.write(chunk);
-      }
-    }, dataChunks);
+        return await bridge.writeBatch(chunks, batchEndsFlush, batchPaintedCap);
+      },
+      [dataChunks, endsFlush, paintedCap] as const,
+    );
+    // The page notes the painted graphemes in this call and reports a failed
+    // note by its message, so that the note cannot fail the flush.
+    if (typeof noteError === 'string') {
+      this.failPaintedNote(noteError);
+    }
   }
 
   private async writeBridge(page: Page, data: string): Promise<void> {

@@ -262,6 +262,8 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
 
       const state = {
         errorMessage: null,
+        // Chunks of a flush that writeBatch() holds until the call that ends it.
+        heldChunks: [],
         ready: false,
         terminal: null,
       };
@@ -570,6 +572,29 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return grid;
       }
 
+      // Adds the graphemes on the screen to the set that the missing-glyph
+      // check of a recorded replay probes. The cap bounds the set.
+      function notePaintedGraphemes(cap) {
+        assertPositiveInteger(
+          cap,
+          'notePaintedGraphemes() cap must be a positive integer',
+        );
+        window.__agentTtyPainted ??= { seen: new Set(), complete: true };
+        const painted = window.__agentTtyPainted;
+        for (const row of getCellGraphemes()) {
+          for (const grapheme of row) {
+            if (grapheme === '' || painted.seen.has(grapheme)) {
+              continue;
+            }
+            if (painted.seen.size < cap) {
+              painted.seen.add(grapheme);
+            } else {
+              painted.complete = false;
+            }
+          }
+        }
+      }
+
       function getSnapshotPayload(options) {
         invariant(
           options === undefined ||
@@ -645,11 +670,82 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         async write(data) {
           const terminal = getReadyTerminal();
           assertStringValue(data, 'write() data must be a string');
+          invariant(
+            state.heldChunks.length === 0,
+            'write() cannot run while writeBatch() holds the chunks of a flush',
+          );
 
           await new Promise((resolve) => {
             terminal.write(data, resolve);
           });
           updateDocumentState();
+        },
+        async writeBatch(chunks, endsFlush = true, paintedCap = null) {
+          const terminal = getReadyTerminal();
+          invariant(
+            Array.isArray(chunks) && chunks.length > 0,
+            'writeBatch() chunks must be a non-empty array',
+          );
+          invariant(
+            typeof endsFlush === 'boolean',
+            'writeBatch() endsFlush must be a boolean',
+          );
+          invariant(
+            paintedCap === null || Number.isInteger(paintedCap),
+            'writeBatch() paintedCap must be null or an integer',
+          );
+          for (const chunk of chunks) {
+            assertStringValue(chunk, 'writeBatch() chunks must be strings');
+          }
+
+          // A flush shows as one frame. A flush that needs several calls holds
+          // its chunks here until the call that ends it, so no frame paints
+          // the screen between two calls: ghostty-web renders on every animation
+          // frame, and a video records every paint. The call that ends the
+          // flush writes all chunks in one task. The wasm write is synchronous,
+          // but ghostty-web calls a write callback one animation frame later,
+          // so waiting on every chunk made a replay cost one frame per event.
+          // The callback on the last chunk makes the call resolve after a frame.
+          for (const chunk of chunks) {
+            state.heldChunks.push(chunk);
+          }
+          if (!endsFlush) {
+            return null;
+          }
+
+          const flush = state.heldChunks;
+          state.heldChunks = [];
+          const lastIndex = flush.length - 1;
+          for (let index = 0; index < lastIndex; index += 1) {
+            terminal.write(flush[index]);
+          }
+          await new Promise((resolve) => {
+            terminal.write(flush[lastIndex], resolve);
+          });
+          updateDocumentState();
+
+          // The caller asks to note the painted graphemes of a recorded
+          // replay here, so a flush costs one page call and not two. A failed
+          // note must not fail the flush: the call returns its message, and
+          // the caller then drops the missing-glyph fields of the export.
+          if (paintedCap === null) {
+            return null;
+          }
+          try {
+            notePaintedGraphemes(paintedCap);
+            return null;
+          } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+          }
+        },
+        // A flush that failed in the middle leaves its earlier calls' chunks
+        // held. The caller drops them, so that a retry starts from the screen
+        // as the failed flush found it.
+        discardHeldChunks() {
+          state.heldChunks = [];
+        },
+        notePaintedGraphemes(cap) {
+          notePaintedGraphemes(cap);
         },
         getSnapshot(options) {
           return getSnapshotPayload(options);
@@ -667,6 +763,10 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         },
         resize(cols, rows) {
           const terminal = getReadyTerminal();
+          invariant(
+            state.heldChunks.length === 0,
+            'resize() cannot run while writeBatch() holds the chunks of a flush',
+          );
           assertPositiveInteger(
             cols,
             'resize() cols must be a positive integer',
