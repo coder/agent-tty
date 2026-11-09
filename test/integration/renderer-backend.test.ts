@@ -1180,6 +1180,98 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     });
   });
 
+  // The scan of a flush reads the viewport once, and a snapshot reads it row by
+  // row. Both must name the same grapheme in every cell, whatever the screen
+  // holds and however it came to hold it.
+  it('notes the graphemes of every cell as the per-row read of a snapshot names them', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    const noted = new Set<string>();
+    const sizes: string[] = [];
+    // Flushes the chunks, notes their graphemes, and returns the notes so far.
+    const flush = async (chunks: string[]): Promise<string[]> =>
+      page.evaluate(
+        `(async () => {
+          await window.__agentTty.writeBatch(${JSON.stringify(chunks)}, true, 1000);
+          return [...window.__agentTtyPainted.seen];
+        })()`,
+      ) as Promise<string[]>;
+    const readGrids = (): Promise<{ grid: string[][]; cells: string[][] }> =>
+      page.evaluate(
+        `(() => {
+          const snapshot = window.__agentTty.getSnapshot({ includeCells: true });
+          return {
+            grid: window.__agentTty.getCellGraphemes(),
+            cells: snapshot.cells.map((line) => line.cells.map((cell) => cell.char)),
+          };
+        })()`,
+      ) as Promise<{ grid: string[][]; cells: string[][] }>;
+    const check = async (chunks: string[]): Promise<string[][]> => {
+      const painted = await flush(chunks);
+      const { grid, cells } = await readGrids();
+      expect(grid).toEqual(cells);
+      sizes.push(`${String(grid[0]?.length)}x${String(grid.length)}`);
+      for (const grapheme of grid.flat()) {
+        if (grapheme !== '') {
+          noted.add(grapheme);
+        }
+      }
+      expect(new Set(painted)).toEqual(noted);
+      return grid;
+    };
+    const resize = (cols: number, rows: number): Promise<unknown> =>
+      page.evaluate(
+        `window.__agentTty.resize(${String(cols)}, ${String(rows)})`,
+      );
+
+    await resize(80, 24);
+    // Narrow, wide, combining, joined and unassigned glyphs on one screen.
+    const mixed = await check([
+      '\u001b[2J\u001b[Habc \u65e5\u672c\u8a9e e\u0301 \u{1F469}\u200D\u{1F4BB} \u{1F1EF}\u{1F1F5}',
+      '\r\n\u0915\u094D\u0937\u093F \u0378 \ue0b0 a\u0300\u0301 \u{1F44D}\u{1F3FD}',
+    ]);
+    expect(mixed[0]?.slice(0, 5)).toEqual(['a', 'b', 'c', ' ', '\u65e5']);
+    // A wide glyph's trailing spacer cell has no grapheme.
+    expect(mixed[0]?.[5]).toBe('');
+    expect(noted).toContain('e\u0301');
+    expect(noted).toContain('\u{1F469}\u200D\u{1F4BB}');
+    expect(noted).toContain('\u0915\u094D');
+    expect(noted).toContain('\u0937\u093F');
+    expect(noted).toContain('\u0378');
+
+    // Every row changes by scrolling, and no flush writes into a row.
+    const scrolled = await check([
+      Array.from({ length: 40 }, (_, line) => `line ${String(line)}`).join(
+        '\r\n',
+      ),
+    ]);
+    expect(scrolled[0]?.join('').trimEnd()).not.toBe(
+      mixed[0]?.join('').trimEnd(),
+    );
+
+    // The other screen has its own cells and returns the first screen's.
+    await check(['\u001b[?1049h\u001b[2J\u001b[Halt \u{1F600} \u00c5']);
+    await check(['\u001b[?1049l']);
+
+    // The cell pool of ghostty-web grows with the screen and does not shrink,
+    // so the scan must index the viewport by the current width.
+    await resize(120, 40);
+    await check(['\u001b[2J\u001b[Hwide screen \u65e5\u672c']);
+    await resize(40, 10);
+    await check(['\u001b[2J\u001b[Hsmall \u65e5\u672c \u{1F600}']);
+    await resize(100, 30);
+    await check(['\u001b[2J\u001b[Hagain \u{1F1EF}\u{1F1F5}']);
+    expect(sizes).toEqual([
+      '80x24',
+      '80x24',
+      '80x24',
+      '80x24',
+      '120x40',
+      '40x10',
+      '100x30',
+    ]);
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 

@@ -547,24 +547,31 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return cells;
       }
 
-      // One grapheme string per viewport cell, '' where getChars() is empty
+      // One grapheme string per viewport cell, '' where the codepoint is 0
       // (blanks and wide-glyph spacers), the same rule as decodeSnapshotCell.
+      // It reads the viewport once: activeBuffer.getLine(row) copies the whole
+      // viewport out of the wasm module for every row, so a loop over the rows
+      // read each cell once per row.
       function getCellGraphemes() {
         const terminal = getReadyTerminal();
         terminal.scrollToBottom();
-        const { cols, rows, activeBuffer, viewportY } =
-          getNormalizedViewportState(terminal);
+        const { cols, rows } = getNormalizedViewportState(terminal);
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
-        const nullCell = activeBuffer.getNullCell();
+        wasmTerm.update();
+        const cells = wasmTerm.getViewport();
+        invariant(
+          cells.length >= rows * cols,
+          'viewport cell count must cover the visible grid',
+        );
         const grid = [];
         for (let row = 0; row < rows; row += 1) {
-          const line = activeBuffer.getLine(viewportY + row);
           const graphemes = [];
           for (let col = 0; col < cols; col += 1) {
-            const cell = line?.getCell(col) ?? nullCell;
             graphemes.push(
-              cell.getChars() === '' ? '' : wasmTerm.getGraphemeString(row, col),
+              cells[row * cols + col].codepoint === 0
+                ? ''
+                : wasmTerm.getGraphemeString(row, col),
             );
           }
           grid.push(graphemes);
