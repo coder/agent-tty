@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { CliError } from '../../../src/cli/errors.js';
 import { ERROR_CODES } from '../../../src/protocol/errors.js';
+import { GhosttyWebCrashedError } from '../../../src/renderer/ghosttyWeb/index.js';
 import type {
   EventRecord,
   SessionRecord,
@@ -653,6 +654,32 @@ describe('withOfflineReplayRenderer', () => {
     );
 
     await expect(replayPromise).rejects.toBe(callbackError);
+    expect(backend.disposed).toBe(true);
+  });
+
+  // KNOWN-BUG TEST for the ghostty-web fault of
+  // https://github.com/coder/ghostty-web/issues/215: remove it with
+  // GhosttyWebCrashedError when a ghostty-web release fixes it.
+  it('maps a ghostty-web crash inside the callback to REPLAY_ERROR and disposes the backend', async () => {
+    const { sessionDir, sessionId } = await createSessionFixture();
+    const backend = createMockBackend();
+    const crash = new GhosttyWebCrashedError(
+      new Error('page.evaluate: Target crashed '),
+    );
+
+    const failure: unknown = await withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.reject(crash),
+      { backendFactory: () => backend },
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CliError);
+    expect(failure).toMatchObject({
+      code: ERROR_CODES.REPLAY_ERROR,
+      message: `Failed to boot or replay renderer for session ${sessionId}. ${crash.message}`,
+      retryable: false,
+      cause: crash,
+    });
     expect(backend.disposed).toBe(true);
   });
 
