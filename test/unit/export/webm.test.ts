@@ -927,7 +927,15 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
     timingMode: 'recorded' | 'accelerated' | 'max-speed',
     bridgeCostMs: number,
     runForMs: number,
-    { resizeCostMs = 0, noteCostMs = 0 } = {},
+    {
+      resizeCostMs = 0,
+      noteCostMs = 0,
+      hangingCall,
+    }: {
+      resizeCostMs?: number;
+      noteCostMs?: number;
+      hangingCall?: 'checkPaintedGlyphs' | 'readHarnessSnapshot';
+    } = {},
   ): Promise<{ replayMs: number | undefined; error: unknown }> {
     mocks.buildReplayInput.mockReturnValue({
       sessionId: 'session-01',
@@ -983,16 +991,21 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
               new Promise<void>((resolve) => {
                 setTimeout(resolve, noteCostMs);
               }),
-            checkPaintedGlyphs: () => Promise.resolve({}),
+            checkPaintedGlyphs: () =>
+              hangingCall === 'checkPaintedGlyphs'
+                ? new Promise<never>(() => undefined)
+                : Promise.resolve({}),
             readHarnessSnapshot: () =>
-              Promise.resolve({
-                cols: 80,
-                rows: 24,
-                cursorRow: 0,
-                cursorCol: 0,
-                isAltScreen: false,
-                visibleLines: [],
-              }),
+              hangingCall === 'readHarnessSnapshot'
+                ? new Promise<never>(() => undefined)
+                : Promise.resolve({
+                    cols: 80,
+                    rows: 24,
+                    cursorRow: 0,
+                    cursorCol: 0,
+                    isAltScreen: false,
+                    visibleLines: [],
+                  }),
             recordedMissingGlyphs: () => Promise.resolve({}),
             finalizeVideo: () => {
               finalizedAtMs = Date.now();
@@ -1052,6 +1065,51 @@ describe('generateWebmExport stall watchdog with the ghostty-web replay loop', (
 
       expect(error).toBeUndefined();
       expect(replayMs).toBeGreaterThan(gapMs);
+    },
+  );
+
+  it('waits a recorded gap of 30 days in full, with no timer longer than a timer can run', async () => {
+    const gapMs = 30 * DAY_MS;
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      const { replayMs, error } = await exportWithRealReplayLoop(
+        [event(0, 0), event(1, gapMs)],
+        'recorded',
+        0,
+        gapMs + 60_000,
+      );
+
+      expect(error).toBeUndefined();
+      expect(replayMs).toBeGreaterThanOrEqual(gapMs);
+      const delays = setTimeoutSpy.mock.calls.map((call) => Number(call[1]));
+      expect(Math.max(...delays)).toBeLessThanOrEqual(2 ** 31 - 1);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    { calls: 'checkPaintedGlyphs', eventCount: 1, lastSeq: 0 },
+    { calls: 'readHarnessSnapshot', eventCount: 1, lastSeq: 0 },
+    { calls: 'checkPaintedGlyphs', eventCount: 3, lastSeq: 2 },
+  ] as const)(
+    'names event $lastSeq when $calls hangs after a recording of $eventCount events that ends with input',
+    async ({ calls, eventCount, lastSeq }) => {
+      // The last event is input, so it changes no pixel and no flush reports it.
+      const events = Array.from({ length: eventCount }, (_, seq) =>
+        event(seq, seq * 10, seq === eventCount - 1 ? 'input_text' : 'output'),
+      );
+      const { replayMs, error } = await exportWithRealReplayLoop(
+        events,
+        'recorded',
+        0,
+        60 * 60 * 1000,
+        { hangingCall: calls },
+      );
+
+      expect(replayMs).toBeUndefined();
+      expect(error).toBeInstanceOf(WebmReplayStallError);
+      expect(error).toMatchObject({ lastSeq, timingMode: 'recorded' });
     },
   );
 

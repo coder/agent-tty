@@ -139,13 +139,16 @@ const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 const WASM_CONTENT_TYPE = 'application/wasm';
 
 const MAX_REPLAY_BATCH_SIZE = 1000;
+// Node runs a timer with a longer delay after 1 ms, so a longer wait is a chain
+// of timers.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 /**
  * A max-speed replay makes at most about this many flushes, however long the
  * recording is. A flush costs one animation frame, one page call and one scan
  * of the screen: 26 ms at 80x24, 33 ms at 120x40 and 112 ms at 200x60 in the
  * median of five sparse-log runs (host load 40 to 100). The limit then takes
- * 1 to 4.5 minutes, under the 5 minutes that a WebM export allows its replay.
- * The video has 25 frames per second, so this many flushes fill 96 s of video.
+ * 1 to 4.5 minutes. The video has 25 frames per second, so this many flushes
+ * fill 96 s of video.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 const RAF_TIMEOUT_MS = 5_000;
@@ -665,18 +668,29 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       }
     };
 
-    const waitForDelay = async (delayMs: number): Promise<void> => {
+    // A wait longer than a timer runs is a chain of timers, so a recorded gap of
+    // 30 days takes 30 days. `onRemaining` runs between two timers with the rest
+    // of the wait.
+    const waitForDelay = async (
+      delayMs: number,
+      onRemaining?: (remainingMs: number) => void,
+    ): Promise<void> => {
       assertNonNegativeInteger(
         delayMs,
         'replayWithTiming delayMs must be a non-negative integer',
       );
-      if (delayMs === 0) {
-        return;
-      }
 
-      await new Promise<void>((resolvePromise) => {
-        setTimeout(resolvePromise, delayMs);
-      });
+      let remainingMs = delayMs;
+      while (remainingMs > 0) {
+        const stepMs = Math.min(remainingMs, MAX_TIMER_DELAY_MS);
+        await new Promise<void>((resolvePromise) => {
+          setTimeout(resolvePromise, stepMs);
+        });
+        remainingMs -= stepMs;
+        if (remainingMs > 0) {
+          onRemaining?.(remainingMs);
+        }
+      }
     };
     const parseEventTimestampMs = (
       eventTs: string,
@@ -821,7 +835,12 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           ),
         );
         onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs });
-        await waitForDelay(scheduledWaitMs);
+        await waitForDelay(scheduledWaitMs, (remainingMs) => {
+          onProgress?.({
+            seq: highestProcessedSeq,
+            scheduledWaitMs: remainingMs,
+          });
+        });
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
@@ -878,6 +897,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     }
 
     await flushOutputBatch();
+    // The last event can change no pixel, so no flush has reported it. The final
+    // calls to the renderer follow, and a stall in one of them is a stall after
+    // this event.
+    onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs: 0 });
 
     invariant(
       outputEventCount + resizeEventCount <= processedEventCount,

@@ -363,7 +363,8 @@ describe('GhosttyWebBackend unit guards', () => {
     );
 
     // Max-speed sends the whole run of output in one flush of three bridge
-    // calls. A caller that watches for stalls sees progress after each call.
+    // calls. A caller that watches for stalls sees progress after each call,
+    // and once more when the replay has reached its last event.
     expect(calls.slice(calls.indexOf('write 1000'))).toEqual([
       'write 1000',
       'report',
@@ -371,8 +372,10 @@ describe('GhosttyWebBackend unit guards', () => {
       'report',
       'write 501',
       'report',
+      'report',
     ]);
-    expect(reports.slice(-3)).toEqual([
+    expect(reports.slice(-4)).toEqual([
+      { seq: 2_500, scheduledWaitMs: 0 },
       { seq: 2_500, scheduledWaitMs: 0 },
       { seq: 2_500, scheduledWaitMs: 0 },
       { seq: 2_500, scheduledWaitMs: 0 },
@@ -451,6 +454,7 @@ describe('GhosttyWebBackend unit guards', () => {
       'note',
       'report 1/0',
       'write second',
+      'report 2/0',
       'report 2/0',
     ]);
   });
@@ -2165,7 +2169,69 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ).toEqual([
       { seq: 0, endsAtMs: FIRST_EVENT_AT_MS + 200 },
       { seq: 1, endsAtMs: FIRST_EVENT_AT_MS + 5_000 },
+      // The report of the last event follows the frame hold of the last flush.
+      { seq: 2, endsAtMs: FIRST_EVENT_AT_MS + 5_000 + 16 },
     ]);
+  });
+
+  it('runs a wait longer than a timer can run as a chain and reports what is left', async () => {
+    vi.useFakeTimers();
+    const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+    const gapMs = 30 * 24 * 60 * 60 * 1000;
+    const backend = createBackend();
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const reports: (ReplayProgress & { atMs: number })[] = [];
+    const startedAtMs = performance.now();
+
+    try {
+      const replay = backend.replayWithTiming(
+        {
+          sessionId: 'renderer-unit-session',
+          initialCols: 80,
+          initialRows: 24,
+          targetSeq: 1,
+          events: [outputEvent(0, 0), outputEvent(1, gapMs)],
+        },
+        RECORDED,
+        (progress) => {
+          reports.push({ ...progress, atMs: performance.now() - startedAtMs });
+        },
+      );
+      await vi.runAllTimersAsync();
+      await replay;
+      const delays = setTimeoutSpy.mock.calls.map((call) => Number(call[1]));
+      expect(Math.max(...delays)).toBeLessThanOrEqual(MAX_TIMER_DELAY_MS);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+
+    // The first report carries the whole wait. The second comes after the first
+    // timer and carries the rest, so the window of a watchdog follows the wait.
+    const [first, second] = reports;
+    if (first === undefined) {
+      throw new Error('the replay made no report');
+    }
+    expect(first.scheduledWaitMs).toBeGreaterThan(MAX_TIMER_DELAY_MS);
+    expect(first.atMs + first.scheduledWaitMs).toBe(FIRST_EVENT_AT_MS + gapMs);
+    expect(second).toEqual({
+      seq: 0,
+      scheduledWaitMs: first.scheduledWaitMs - MAX_TIMER_DELAY_MS,
+      atMs: first.atMs + MAX_TIMER_DELAY_MS,
+    });
   });
 
   it('keeps the recorded pace when continuous output fills every frame hold', async () => {

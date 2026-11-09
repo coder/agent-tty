@@ -123,9 +123,10 @@ export interface ReplayProgress {
 export interface VideoCapableRendererBackend extends RendererBackend {
   /**
    * Replay events with controlled timing for video capture. `onProgress`
-   * runs before each wait on the timing schedule, after each batch of
-   * output that the replay writes to the renderer and after the renderer
-   * resizes for a resize event.
+   * runs before each wait on the timing schedule (and between the timers of a
+   * long wait), after each batch of output that the replay writes to the
+   * renderer, after the renderer resizes for a resize event and once the replay
+   * has reached its last event.
    */
   replayWithTiming(
     input: ReplayInput,
