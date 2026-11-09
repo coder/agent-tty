@@ -1196,12 +1196,18 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
           return [...window.__agentTtyPainted.seen];
         })()`,
       ) as Promise<string[]>;
-    const readGrids = (): Promise<{ grid: string[][]; cells: string[][] }> =>
+    // The scan reads first, then the snapshot reads the same screen. A script
+    // runs before the scan, in the same task.
+    const readGrids = (
+      script = '',
+    ): Promise<{ grid: string[][]; cells: string[][] }> =>
       page.evaluate(
         `(() => {
+          ${script}
+          const grid = window.__agentTty.getCellGraphemes();
           const snapshot = window.__agentTty.getSnapshot({ includeCells: true });
           return {
-            grid: window.__agentTty.getCellGraphemes(),
+            grid,
             cells: snapshot.cells.map((line) => line.cells.map((cell) => cell.char)),
           };
         })()`,
@@ -1219,12 +1225,18 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(new Set(painted)).toEqual(noted);
       return grid;
     };
-    const resize = (cols: number, rows: number): Promise<unknown> =>
-      page.evaluate(
-        `window.__agentTty.resize(${String(cols)}, ${String(rows)})`,
+    // The scan runs in the task of the resize, before any frame updates the
+    // render state, as the note after a resize event of a replay does.
+    const resizeAndRead = async (cols: number, rows: number): Promise<void> => {
+      const { grid, cells } = await readGrids(
+        `window.__agentTty.resize(${String(cols)}, ${String(rows)});`,
       );
+      expect(grid).toHaveLength(rows);
+      expect(grid.every((row) => row.length === cols)).toBe(true);
+      expect(grid).toEqual(cells);
+    };
 
-    await resize(80, 24);
+    await resizeAndRead(80, 24);
     // Narrow, wide, combining, joined and unassigned glyphs on one screen.
     const mixed = await check([
       '\u001b[2J\u001b[Habc \u65e5\u672c\u8a9e e\u0301 \u{1F469}\u200D\u{1F4BB} \u{1F1EF}\u{1F1F5}',
@@ -1253,13 +1265,14 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     await check(['\u001b[?1049h\u001b[2J\u001b[Halt \u{1F600} \u00c5']);
     await check(['\u001b[?1049l']);
 
-    // The cell pool of ghostty-web grows with the screen and does not shrink,
-    // so the scan must index the viewport by the current width.
-    await resize(120, 40);
-    await check(['\u001b[2J\u001b[Hwide screen \u65e5\u672c']);
-    await resize(40, 10);
+    // The cell pool of ghostty-web grows with the screen and does not shrink.
+    // After a shrink its cells past the screen still hold the larger screen,
+    // so the scan must index the viewport by the width of the screen.
+    await resizeAndRead(120, 40);
+    await check(['x'.repeat(120 * 40)]);
+    await resizeAndRead(40, 10);
     await check(['\u001b[2J\u001b[Hsmall \u65e5\u672c \u{1F600}']);
-    await resize(100, 30);
+    await resizeAndRead(100, 30);
     await check(['\u001b[2J\u001b[Hagain \u{1F1EF}\u{1F1F5}']);
     expect(sizes).toEqual([
       '80x24',
