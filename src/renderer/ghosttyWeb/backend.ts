@@ -165,6 +165,11 @@ const MAX_SPEED_FRAME_BUDGET = 2_400;
  */
 const VIDEO_FPS = 25;
 const VIDEO_FRAME_MS = 1000 / VIDEO_FPS;
+// waitForDelay takes whole milliseconds, and the wait before a resize uses this.
+invariant(
+  Number.isInteger(VIDEO_FRAME_MS),
+  'VIDEO_FPS must divide 1000 so that a video frame is a whole number of ms',
+);
 const RAF_TIMEOUT_MS = 5_000;
 
 let servedAssetsPromise: Promise<
