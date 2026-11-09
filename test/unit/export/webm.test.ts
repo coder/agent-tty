@@ -603,6 +603,7 @@ describe('generateWebmExport stall watchdog', () => {
   async function startExport(
     script: ReplayScript,
     timingMode: 'recorded' | 'accelerated' | 'max-speed' = 'recorded',
+    stallWindowMs?: number,
   ) {
     let markReplayStarted: () => void = () => undefined;
     const replayStarted = new Promise<void>((resolve) => {
@@ -628,7 +629,10 @@ describe('generateWebmExport stall watchdog', () => {
         outputPath: '/tmp/exports/recording-1-webm.webm',
         timingMode,
       },
-      { backendFactory: () => mockBackend.backend },
+      {
+        backendFactory: () => mockBackend.backend,
+        ...(stallWindowMs === undefined ? {} : { stallWindowMs }),
+      },
     ).then(
       (result) => ({ result, error: undefined }),
       (error: unknown) => ({ result: undefined, error }),
@@ -786,6 +790,44 @@ describe('generateWebmExport stall watchdog', () => {
 
     expect(error).toBeInstanceOf(WebmReplayStallError);
     expect(error).toMatchObject({ stallWindowMs: WINDOW_MS, lastSeq: 3 });
+  });
+
+  it('stops a replay that hangs after a scheduled wait of 30 days, which with the window is longer than a timer runs', async () => {
+    // The wait and the window together are 30 days and 5 minutes: more than
+    // the longest timer, so the stall is the end of a chain of two timers.
+    const { outcome, mockBackend } = await startExport((onProgress) => {
+      onProgress({ seq: 3, scheduledWaitMs: 30 * DAY_MS });
+      return new Promise(() => undefined);
+    });
+
+    await vi.advanceTimersByTimeAsync(30 * DAY_MS + WINDOW_MS - 1);
+    expect(mockBackend.dispose).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
+    const { error } = await outcome;
+
+    expect(error).toBeInstanceOf(WebmReplayStallError);
+    expect(error).toMatchObject({ stallWindowMs: WINDOW_MS, lastSeq: 3 });
+  });
+
+  it('stops a hung replay once a stall window that outlasts a timer has passed', async () => {
+    const stallWindowMs = MAX_TIMER_DELAY_MS + 5;
+    const { outcome, mockBackend } = await startExport(
+      () => new Promise(() => undefined),
+      'recorded',
+      stallWindowMs,
+    );
+
+    await vi.advanceTimersByTimeAsync(stallWindowMs - 1);
+    expect(mockBackend.dispose).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockBackend.dispose).toHaveBeenCalledTimes(1);
+    const { error } = await outcome;
+
+    expect(error).toBeInstanceOf(WebmReplayStallError);
+    expect(error).toMatchObject({ stallWindowMs, lastSeq: -1 });
   });
 
   it('leaves no timer behind when the replay succeeds', async () => {
