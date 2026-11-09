@@ -14,7 +14,10 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chromium, type Browser } from 'playwright';
 
-import type { ReplayTimingOptions } from '../../../src/renderer/backend.js';
+import type {
+  ReplayProgress,
+  ReplayTimingOptions,
+} from '../../../src/renderer/backend.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { MAX_CACHED_GLYPH_PROBES } from '../../../src/renderer/ghosttyWeb/missingGlyphs.js';
@@ -310,6 +313,151 @@ describe('GhosttyWebBackend unit guards', () => {
         backend as unknown as { paintedNoteCap: () => number | null }
       ).paintedNoteCap(),
     ).toBeNull();
+  });
+
+  it('reports progress after each bridge batch of a timed replay flush', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    const reports: ReplayProgress[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${String(dataChunks.length)}`);
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+    const events: ReplayInput['events'] = Array.from(
+      { length: 2_501 },
+      (_, seq) => ({
+        seq,
+        ts: '2026-03-19T12:00:00.000Z',
+        type: 'output',
+        payload: { data: `out${String(seq)}` },
+      }),
+    );
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2_500,
+        events,
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+      (progress) => {
+        calls.push('report');
+        reports.push(progress);
+      },
+    );
+
+    // Max-speed sends the whole run of output in one flush of three bridge
+    // calls. A caller that watches for stalls sees progress after each call,
+    // and once more when the replay has reached its last event.
+    expect(calls.slice(calls.indexOf('write 1000'))).toEqual([
+      'write 1000',
+      'report',
+      'write 1000',
+      'report',
+      'write 501',
+      'report',
+      'report',
+    ]);
+    expect(reports.slice(-4)).toEqual([
+      { seq: 2_500, scheduledWaitMs: 0 },
+      { seq: 2_500, scheduledWaitMs: 0 },
+      { seq: 2_500, scheduledWaitMs: 0 },
+      { seq: 2_500, scheduledWaitMs: 0 },
+    ]);
+  });
+
+  it('reports progress between the resize call and the note that follow a resize event', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: (_page: object, cols: number, rows: number) => {
+        calls.push(`resize ${String(cols)}x${String(rows)}`);
+        return Promise.resolve();
+      },
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${dataChunks.join(',')}`);
+        return Promise.resolve();
+      },
+      notePaintedGraphemes: () => {
+        calls.push('note');
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 100,
+            rows: 30,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'first' },
+          },
+          {
+            seq: 1,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'resize',
+            payload: { cols: 100, rows: 30 },
+          },
+          {
+            seq: 2,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'second' },
+          },
+        ],
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+      (progress) => {
+        calls.push(
+          `report ${String(progress.seq)}/${String(progress.scheduledWaitMs)}`,
+        );
+      },
+    );
+
+    expect(calls.slice(calls.indexOf('resize 100x30') - 1)).toEqual([
+      'report 0/0',
+      'resize 100x30',
+      'report 1/0',
+      'note',
+      'report 1/0',
+      'write second',
+      'report 2/0',
+      'report 2/0',
+    ]);
   });
 
   it('retries the painted-grapheme note after the backend reboots', async () => {
@@ -2151,6 +2299,129 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
       events.slice(0, 21).map((event) => `out${String(event.seq)}`),
     );
+  });
+
+  it('reports the wait on the timing schedule before it starts the wait', async () => {
+    vi.useFakeTimers();
+    const backend = createBackend();
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+    const reports: (ReplayProgress & { atMs: number })[] = [];
+    const startedAtMs = performance.now();
+
+    const replay = backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 5_000)],
+      },
+      RECORDED,
+      (progress) => {
+        reports.push({ ...progress, atMs: performance.now() - startedAtMs });
+      },
+    );
+    await vi.runAllTimersAsync();
+    await replay;
+
+    // The first event sits at the first frame hold. Each later event sits
+    // at its recorded offset from it, so a report plus its wait ends at that
+    // place on the schedule.
+    expect(
+      reports.map((report) => ({
+        seq: report.seq,
+        endsAtMs: report.atMs + report.scheduledWaitMs,
+      })),
+    ).toEqual([
+      { seq: 0, endsAtMs: FIRST_EVENT_AT_MS + 200 },
+      { seq: 1, endsAtMs: FIRST_EVENT_AT_MS + 5_000 },
+      // The report of the last event follows the frame hold of the last flush.
+      { seq: 2, endsAtMs: FIRST_EVENT_AT_MS + 5_000 + 16 },
+    ]);
+  });
+
+  it('runs a wait longer than a timer can run as a chain and reports what is left', async () => {
+    vi.useFakeTimers();
+    const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+    const gapMs = 30 * 24 * 60 * 60 * 1000;
+    const backend = createBackend();
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const reports: (ReplayProgress & { atMs: number })[] = [];
+    const startedAtMs = performance.now();
+
+    try {
+      const replay = backend.replayWithTiming(
+        {
+          sessionId: 'renderer-unit-session',
+          initialCols: 80,
+          initialRows: 24,
+          targetSeq: 1,
+          events: [outputEvent(0, 0), outputEvent(1, gapMs)],
+        },
+        RECORDED,
+        (progress) => {
+          reports.push({ ...progress, atMs: performance.now() - startedAtMs });
+        },
+      );
+      await vi.runAllTimersAsync();
+      await replay;
+      const delays = setTimeoutSpy.mock.calls.map((call) => Number(call[1]));
+      expect(Math.max(...delays)).toBeLessThanOrEqual(MAX_TIMER_DELAY_MS);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+
+    // The first report carries the whole wait. The second comes after the first
+    // timer and carries the rest, so the window of a watchdog follows the wait.
+    const [first, second] = reports;
+    if (first === undefined) {
+      throw new Error('the replay made no report');
+    }
+    expect(first.scheduledWaitMs).toBeGreaterThan(MAX_TIMER_DELAY_MS);
+    expect(first.atMs + first.scheduledWaitMs).toBe(FIRST_EVENT_AT_MS + gapMs);
+    expect(second).toEqual({
+      seq: 0,
+      scheduledWaitMs: first.scheduledWaitMs - MAX_TIMER_DELAY_MS,
+      atMs: first.atMs + MAX_TIMER_DELAY_MS,
+    });
+  });
+
+  it('waits a recorded gap of 1 ms', async () => {
+    // The input event ends the flush of the first output, so the flush is
+    // the mark of the end of the wait before the input event.
+    const flushes = await replayAndRecordFlushes(
+      [outputEvent(0, 0), inputEvent(1, 1)],
+      RECORDED,
+    );
+
+    expect(flushes.map((flush) => flush.atMs)).toEqual([FIRST_EVENT_AT_MS + 1]);
   });
 
   it('keeps the recorded pace when continuous output fills every frame hold', async () => {

@@ -30,6 +30,7 @@ import {
 } from '../../util/resourceScope.js';
 import type {
   RecordedGlyphFields,
+  ReplayProgress,
   ReplayTimingOptions,
   ScreenshotOptions,
   SnapshotOptions,
@@ -138,6 +139,9 @@ const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 const WASM_CONTENT_TYPE = 'application/wasm';
 
 const MAX_REPLAY_BATCH_SIZE = 1000;
+// Node runs a timer with a longer delay after 1 ms, so a longer wait is a chain
+// of timers.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 /**
  * Recorded time ends at most about this many flushes of a max-speed replay,
  * however long the recording is. A resize that finds output waiting ends one
@@ -150,11 +154,11 @@ const MAX_REPLAY_BATCH_SIZE = 1000;
  * to 70 %. A worst-case log of 2,400 full-screen repaints 17 ms apart at
  * 200x60 took 287 s (120 ms per flush) in two runs at pressure 15 to 44 %, and
  * 368 s to 405 s (153 to 169 ms per flush) in three runs of a verifier at
- * pressure 23 to 45 %. A WebM export allows its replay 5 minutes
- * (REPLAY_TIMEOUT_MS), so a loaded host can pass that limit at a large
- * terminal size and fail the export. The video has 25 frames per second and
- * records the replay as it runs, so this many flushes of 40 ms or more make a
- * video of 96 s or more.
+ * pressure 23 to 45 %. A WebM export has no limit on the length of its replay,
+ * so a loaded host makes it slower and does not fail it. The export fails only
+ * when the renderer makes no progress for 5 minutes (REPLAY_STALL_WINDOW_MS in
+ * webm.ts). The video has 25 frames per second and records the replay as it
+ * runs, so this many flushes of 40 ms or more make a video of 96 s or more.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 /**
@@ -578,9 +582,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   public async replayWithTiming(
     input: ReplayInput,
     timing: ReplayTimingOptions,
+    onProgress?: (progress: ReplayProgress) => void,
   ): Promise<ReplayState> {
     try {
-      return await this.replayWithTimingInner(input, timing);
+      return await this.replayWithTimingInner(input, timing, onProgress);
     } catch (error) {
       throw describeReplayFailure(error);
     }
@@ -589,6 +594,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   private async replayWithTimingInner(
     input: ReplayInput,
     timing: ReplayTimingOptions,
+    onProgress?: (progress: ReplayProgress) => void,
   ): Promise<ReplayState> {
     const page = this.requireOperationalPage('replayWithTiming()');
 
@@ -685,18 +691,29 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       }
     };
 
-    const waitForDelay = async (delayMs: number): Promise<void> => {
+    // A wait longer than a timer runs is a chain of timers, so a recorded gap of
+    // 30 days takes 30 days. `onRemaining` runs between two timers with the rest
+    // of the wait.
+    const waitForDelay = async (
+      delayMs: number,
+      onRemaining?: (remainingMs: number) => void,
+    ): Promise<void> => {
       assertNonNegativeInteger(
         delayMs,
         'replayWithTiming delayMs must be a non-negative integer',
       );
-      if (delayMs === 0) {
-        return;
-      }
 
-      await new Promise<void>((resolvePromise) => {
-        setTimeout(resolvePromise, delayMs);
-      });
+      let remainingMs = delayMs;
+      while (remainingMs > 0) {
+        const stepMs = Math.min(remainingMs, MAX_TIMER_DELAY_MS);
+        await new Promise<void>((resolvePromise) => {
+          setTimeout(resolvePromise, stepMs);
+        });
+        remainingMs -= stepMs;
+        if (remainingMs > 0) {
+          onRemaining?.(remainingMs);
+        }
+      }
     };
     const parseEventTimestampMs = (
       eventTs: string,
@@ -773,7 +790,15 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         return;
       }
 
-      await this.flushOutputBatch(page, pendingOutputChunks, undefined, true);
+      await this.flushOutputBatch(
+        page,
+        pendingOutputChunks,
+        () => {
+          onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs: 0 });
+          return Promise.resolve();
+        },
+        true,
+      );
       pendingOutputChunks = [];
       pendingSinceTimestampMs = null;
       if (holdFrame) {
@@ -850,14 +875,19 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         }
         // Waiting for the event's place on the schedule lets frame holds and
         // bridge calls use up time that the recording spent idle.
-        await waitForDelay(
-          Math.max(
-            0,
-            Math.round(
-              scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
-            ),
+        const scheduledWaitMs = Math.max(
+          0,
+          Math.round(
+            scheduledElapsedMs - (performance.now() - scheduleStartedAtMs),
           ),
         );
+        onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs });
+        await waitForDelay(scheduledWaitMs, (remainingMs) => {
+          onProgress?.({
+            seq: highestProcessedSeq,
+            scheduledWaitMs: remainingMs,
+          });
+        });
       }
       previousProcessedEventTimestampMs = eventTimestampMs;
 
@@ -885,6 +915,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           this.currentCols = event.payload.cols;
           this.currentRows = event.payload.rows;
           resizeEventCount += 1;
+          // The resize and the note that follows are two page calls. A
+          // report between them keeps each call a stretch of its own.
+          onProgress?.({ seq: event.seq, scheduledWaitMs: 0 });
           await this.notePaintedGraphemes(page);
           await waitForDelay(resolvedMinFrameHoldMs);
           break;
@@ -914,6 +947,10 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     }
 
     await flushOutputBatch();
+    // The last event can change no pixel, so no flush has reported it. The final
+    // calls to the renderer follow, and a stall in one of them is a stall after
+    // this event.
+    onProgress?.({ seq: highestProcessedSeq, scheduledWaitMs: 0 });
 
     invariant(
       outputEventCount + resizeEventCount <= processedEventCount,
@@ -1805,7 +1842,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
   /**
    * Writes the chunks of one flush into the page. With `notePainted`, the page
    * also notes the graphemes on the screen once the flush is written, in the
-   * call that ends the flush.
+   * call that ends the flush. `afterEachBatch` runs after each page call.
    */
   private async flushOutputBatch(
     page: Page,
