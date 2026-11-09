@@ -1479,12 +1479,15 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
 
     // A write changes the wasm screen at once, and the render state follows a
     // frame later. A decode in the task of the write must not read the old
-    // screen.
+    // screen. The old screen has narrow cells where the new row has the
+    // spacers of two wide glyphs, so an old width shows as extra spaces.
     const fresh = await compare(
-      `void window.__agentTty.write('\\u001b[2J\\u001b[H\\u001b[1;31msync\\u001b[0m \\u65e5');`,
+      `void window.__agentTty.write('\\u001b[2J\\u001b[H\\u65e5\\u672cabc \\u001b[1;31msync\\u001b[0m');`,
       1,
     );
-    expect(cellAt(fresh.cells, 0, 0)).toMatchObject({ char: 's', bold: true });
+    expect(cellAt(fresh.cells, 0, 0).char).toBe('\u65e5');
+    expect(cellAt(fresh.cells, 0, 1).char).toBe('');
+    expect(cellAt(fresh.cells, 0, 8)).toMatchObject({ char: 's', bold: true });
 
     // The cell pool of ghostty-web grows with the screen and does not shrink.
     // After a shrink its cells past the screen still hold the larger screen,
