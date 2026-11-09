@@ -1265,6 +1265,15 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     await check(['\u001b[?1049h\u001b[2J\u001b[Halt \u{1F600} \u00c5']);
     await check(['\u001b[?1049l']);
 
+    // A write changes the wasm screen at once, and the render state follows
+    // a frame later. A scan in the task of the write must not read the old
+    // state.
+    const fresh = await readGrids(
+      `void window.__agentTty.write('\\u001b[2J\\u001b[Hsync');`,
+    );
+    expect(fresh.grid[0]?.slice(0, 4)).toEqual(['s', 'y', 'n', 'c']);
+    expect(fresh.grid).toEqual(fresh.cells);
+
     // The cell pool of ghostty-web grows with the screen and does not shrink.
     // After a shrink its cells past the screen still hold the larger screen,
     // so the scan must index the viewport by the width of the screen.
