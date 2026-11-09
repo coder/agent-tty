@@ -12,8 +12,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { chromium, type Browser } from 'playwright';
 
-import type { ReplayTimingOptions } from '../../../src/renderer/backend.js';
+import type {
+  ReplayProgress,
+  ReplayTimingOptions,
+} from '../../../src/renderer/backend.js';
 import type { ReplayInput } from '../../../src/renderer/types.js';
 import { BUNDLED_FONT_ASSETS } from '../../../src/renderer/bundledFont.js';
 import { MAX_CACHED_GLYPH_PROBES } from '../../../src/renderer/ghosttyWeb/missingGlyphs.js';
@@ -309,6 +313,151 @@ describe('GhosttyWebBackend unit guards', () => {
         backend as unknown as { paintedNoteCap: () => number | null }
       ).paintedNoteCap(),
     ).toBeNull();
+  });
+
+  it('reports progress after each bridge batch of a timed replay flush', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    const reports: ReplayProgress[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${String(dataChunks.length)}`);
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+    const events: ReplayInput['events'] = Array.from(
+      { length: 2_501 },
+      (_, seq) => ({
+        seq,
+        ts: '2026-03-19T12:00:00.000Z',
+        type: 'output',
+        payload: { data: `out${String(seq)}` },
+      }),
+    );
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2_500,
+        events,
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+      (progress) => {
+        calls.push('report');
+        reports.push(progress);
+      },
+    );
+
+    // Max-speed sends the whole run of output in one flush of three bridge
+    // calls. A caller that watches for stalls sees progress after each call,
+    // and once more when the replay has reached its last event.
+    expect(calls.slice(calls.indexOf('write 1000'))).toEqual([
+      'write 1000',
+      'report',
+      'write 1000',
+      'report',
+      'write 501',
+      'report',
+      'report',
+    ]);
+    expect(reports.slice(-4)).toEqual([
+      { seq: 2_500, scheduledWaitMs: 0 },
+      { seq: 2_500, scheduledWaitMs: 0 },
+      { seq: 2_500, scheduledWaitMs: 0 },
+      { seq: 2_500, scheduledWaitMs: 0 },
+    ]);
+  });
+
+  it('reports progress between the resize call and the note that follow a resize event', async () => {
+    const backend = createBackend();
+    const calls: string[] = [];
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: (_page: object, cols: number, rows: number) => {
+        calls.push(`resize ${String(cols)}x${String(rows)}`);
+        return Promise.resolve();
+      },
+      writeBatchBridge: (_page: object, dataChunks: string[]) => {
+        calls.push(`write ${dataChunks.join(',')}`);
+        return Promise.resolve();
+      },
+      notePaintedGraphemes: () => {
+        calls.push('note');
+        return Promise.resolve();
+      },
+      checkPaintedGlyphs: () => Promise.resolve({}),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 100,
+            rows: 30,
+            cursorRow: 0,
+            cursorCol: 0,
+          }),
+        ),
+    });
+
+    await backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [
+          {
+            seq: 0,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'first' },
+          },
+          {
+            seq: 1,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'resize',
+            payload: { cols: 100, rows: 30 },
+          },
+          {
+            seq: 2,
+            ts: '2026-03-19T12:00:00.000Z',
+            type: 'output',
+            payload: { data: 'second' },
+          },
+        ],
+      },
+      { mode: 'max-speed', minFrameHoldMs: 0, finalFrameHoldMs: 0 },
+      (progress) => {
+        calls.push(
+          `report ${String(progress.seq)}/${String(progress.scheduledWaitMs)}`,
+        );
+      },
+    );
+
+    expect(calls.slice(calls.indexOf('resize 100x30') - 1)).toEqual([
+      'report 0/0',
+      'resize 100x30',
+      'report 1/0',
+      'note',
+      'report 1/0',
+      'write second',
+      'report 2/0',
+      'report 2/0',
+    ]);
   });
 
   it('retries the painted-grapheme note after the backend reboots', async () => {
@@ -923,6 +1072,43 @@ describe('GhosttyWebBackend unit guards', () => {
       await backend.dispose();
     }
   }, 45_000);
+
+  // The max-speed hold before a resize lasts one video frame, which is 40 ms
+  // only at 25 frames per second. The context sets that rate, so a change of
+  // the Playwright default does not move the hold.
+  it('records the video at 25 frames per second', async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), 'agent-tty-video-fps-'));
+    const size = { width: 760, height: 536 };
+    const newContext = vi.fn(() =>
+      Promise.reject(new Error('stop at the context options')),
+    );
+    const launch = vi.spyOn(chromium, 'launch').mockResolvedValue({
+      newContext,
+      on: vi.fn(),
+      close: vi.fn(() => Promise.resolve()),
+    } as unknown as Browser);
+    const backend = new GhosttyWebBackend('renderer-unit-session', PROFILE, {
+      outputDir,
+      size,
+    });
+
+    try {
+      await expect(backend.boot()).rejects.toThrow(
+        'stop at the context options',
+      );
+
+      expect(newContext).toHaveBeenCalledTimes(1);
+      expect(newContext.mock.calls[0]).toEqual([
+        expect.objectContaining({
+          recordVideo: { dir: outputDir, size, fps: 25 },
+        }),
+      ]);
+    } finally {
+      launch.mockRestore();
+      await backend.dispose();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
 
   it('times out screenshot paint waits after 5 seconds', async () => {
     vi.useFakeTimers();
@@ -1768,9 +1954,10 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ]);
   });
 
-  // The page paints a flush on its next animation frame. The hold gives that
-  // paint time to reach the video before the resize changes the canvas.
-  it('holds one frame hold between the last flush and a resize', async () => {
+  // The page paints a flush on its next animation frame, and the video has 25
+  // frames per second. The hold gives that paint one video frame (40 ms) to
+  // reach the video before the resize changes the canvas.
+  it('holds one video frame between the last flush and a resize', async () => {
     const timeline = await replayAndRecordTimeline(
       [
         outputEvent(0, 0),
@@ -1790,8 +1977,148 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     ]);
     const atMs = (step: string): number | undefined =>
       timeline.find((entry) => entry.step === step)?.atMs;
-    expect((atMs('resize 100') ?? 0) - (atMs('flush out0') ?? 0)).toBe(16);
+    expect((atMs('resize 100') ?? 0) - (atMs('flush out0') ?? 0)).toBe(40);
   });
+
+  // The timestamp check ends a max-speed flush without a hold. When that flush
+  // comes before a resize, the resize finds nothing pending, so the hold of the
+  // resize case is the only one left. Without it the resize changes the canvas
+  // before the video has recorded the screen before the resize.
+  it.each([
+    {
+      label: 'the resize itself ends the flush',
+      events: [
+        outputEvent(0, 0),
+        resizeEvent(1, 20),
+        outputEvent(2, 40),
+        exitEvent(3, 42),
+      ],
+    },
+    {
+      label: 'an input before the resize ends the flush',
+      events: [
+        outputEvent(0, 0),
+        inputEvent(1, 20),
+        resizeEvent(2, 25),
+        outputEvent(3, 40),
+        exitEvent(4, 42),
+      ],
+    },
+  ])(
+    'holds one video frame between the last flush and a resize when $label',
+    async ({ events }) => {
+      const timeline = await replayAndRecordTimeline(events, {
+        mode: 'max-speed',
+        minFrameHoldMs: 16,
+        finalFrameHoldMs: 0,
+      });
+
+      expect(timeline.map((entry) => entry.step)).toEqual([
+        'flush out0',
+        'resize 100',
+        'note',
+        'flush out' + String(events.length - 2),
+        'snapshot',
+      ]);
+      const atMs = (step: string): number =>
+        timeline.find((entry) => entry.step === step)?.atMs ?? Number.NaN;
+      expect(atMs('resize 100') - atMs('flush out0')).toBe(40);
+    },
+  );
+
+  it('holds that frame once, for the first of two resizes that follow the flush', async () => {
+    const timeline = await replayAndRecordTimeline(
+      [
+        outputEvent(0, 0),
+        resizeEvent(1, 20),
+        resizeEvent(2, 21),
+        exitEvent(3, 22),
+      ],
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 0 },
+    );
+
+    const resizes = timeline.filter((entry) => entry.step === 'resize 100');
+    expect(resizes).toHaveLength(2);
+    // The hold after the first resize is the only time between the two.
+    expect((resizes[1]?.atMs ?? 0) - (resizes[0]?.atMs ?? 0)).toBe(16);
+    expect((resizes[0]?.atMs ?? 0) - (timeline[0]?.atMs ?? 0)).toBe(40);
+  });
+
+  // A timed flush has no hold, then output arrives and waits for the resize.
+  // The resize case flushes that output, and the one hold that follows is all
+  // the screen before the resize needs. A second hold would show that screen
+  // for two video frames instead of one.
+  it('holds one video frame, not two, when a timed flush is followed by pending output and a resize', async () => {
+    const timeline = await replayAndRecordTimeline(
+      [
+        outputEvent(0, 0),
+        outputEvent(1, 100),
+        resizeEvent(2, 101),
+        exitEvent(3, 102),
+      ],
+      { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 0 },
+    );
+
+    expect(timeline.map((entry) => entry.step)).toEqual([
+      'flush out0',
+      'flush out1',
+      'resize 100',
+      'note',
+      'snapshot',
+    ]);
+    const atMs = (step: string): number =>
+      timeline.find((entry) => entry.step === step)?.atMs ?? Number.NaN;
+    // The timed flush has no hold, so the next flush follows at once.
+    expect(atMs('flush out1') - atMs('flush out0')).toBe(0);
+    // One hold sits between the last flush and the resize.
+    expect(atMs('resize 100') - atMs('flush out1')).toBe(40);
+  });
+
+  // A frame hold longer than a video frame already gives the screen before the
+  // resize more than one video frame.
+  it('holds a max-speed frame hold that is longer than a video frame before a resize', async () => {
+    const timeline = await replayAndRecordTimeline(
+      [outputEvent(0, 0), resizeEvent(1, 5), exitEvent(2, 6)],
+      { mode: 'max-speed', minFrameHoldMs: 100, finalFrameHoldMs: 0 },
+    );
+
+    const atMs = (step: string): number =>
+      timeline.find((entry) => entry.step === step)?.atMs ?? Number.NaN;
+    expect(atMs('resize 100') - atMs('flush out0')).toBe(100);
+  });
+
+  // Recorded and accelerated replays keep their pauses, so the screen before a
+  // resize is on the page for as long as the recording shows it. Their frame
+  // hold before a resize does not change.
+  it.each([
+    [
+      'recorded',
+      { mode: 'recorded', finalFrameHoldMs: 0 } satisfies ReplayTimingOptions,
+      16,
+    ],
+    [
+      'accelerated',
+      {
+        mode: 'accelerated',
+        maxGapMs: 400,
+        minFrameHoldMs: 100,
+        finalFrameHoldMs: 0,
+      } satisfies ReplayTimingOptions,
+      100,
+    ],
+  ])(
+    'holds the frame hold of %s mode before a resize',
+    async (_name, timing, holdMs) => {
+      const timeline = await replayAndRecordTimeline(
+        [outputEvent(0, 0), resizeEvent(1, 5), exitEvent(2, 6)],
+        timing,
+      );
+
+      const atMs = (step: string): number =>
+        timeline.find((entry) => entry.step === step)?.atMs ?? Number.NaN;
+      expect(atMs('resize 100') - atMs('flush out0')).toBe(holdMs);
+    },
+  );
 
   it.each([
     ['recorded', RECORDED],
@@ -1972,6 +2299,129 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     expect(flushes.flatMap((flush) => flush.chunks)).toEqual(
       events.slice(0, 21).map((event) => `out${String(event.seq)}`),
     );
+  });
+
+  it('reports the wait on the timing schedule before it starts the wait', async () => {
+    vi.useFakeTimers();
+    const backend = createBackend();
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+    const reports: (ReplayProgress & { atMs: number })[] = [];
+    const startedAtMs = performance.now();
+
+    const replay = backend.replayWithTiming(
+      {
+        sessionId: 'renderer-unit-session',
+        initialCols: 80,
+        initialRows: 24,
+        targetSeq: 2,
+        events: [outputEvent(0, 0), outputEvent(1, 200), outputEvent(2, 5_000)],
+      },
+      RECORDED,
+      (progress) => {
+        reports.push({ ...progress, atMs: performance.now() - startedAtMs });
+      },
+    );
+    await vi.runAllTimersAsync();
+    await replay;
+
+    // The first event sits at the first frame hold. Each later event sits
+    // at its recorded offset from it, so a report plus its wait ends at that
+    // place on the schedule.
+    expect(
+      reports.map((report) => ({
+        seq: report.seq,
+        endsAtMs: report.atMs + report.scheduledWaitMs,
+      })),
+    ).toEqual([
+      { seq: 0, endsAtMs: FIRST_EVENT_AT_MS + 200 },
+      { seq: 1, endsAtMs: FIRST_EVENT_AT_MS + 5_000 },
+      // The report of the last event follows the frame hold of the last flush.
+      { seq: 2, endsAtMs: FIRST_EVENT_AT_MS + 5_000 + 16 },
+    ]);
+  });
+
+  it('runs a wait longer than a timer can run as a chain and reports what is left', async () => {
+    vi.useFakeTimers();
+    const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+    const gapMs = 30 * 24 * 60 * 60 * 1000;
+    const backend = createBackend();
+    Object.assign(backend as object, {
+      isBooted: true,
+      page: { isClosed: () => false },
+      resizeBridge: () => Promise.resolve(),
+      flushOutputBatch: () => Promise.resolve(),
+      readHarnessSnapshot: () =>
+        Promise.resolve(
+          createHarnessSnapshotPayload({
+            cols: 80,
+            rows: 24,
+            visibleLines: [],
+          }),
+        ),
+    });
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const reports: (ReplayProgress & { atMs: number })[] = [];
+    const startedAtMs = performance.now();
+
+    try {
+      const replay = backend.replayWithTiming(
+        {
+          sessionId: 'renderer-unit-session',
+          initialCols: 80,
+          initialRows: 24,
+          targetSeq: 1,
+          events: [outputEvent(0, 0), outputEvent(1, gapMs)],
+        },
+        RECORDED,
+        (progress) => {
+          reports.push({ ...progress, atMs: performance.now() - startedAtMs });
+        },
+      );
+      await vi.runAllTimersAsync();
+      await replay;
+      const delays = setTimeoutSpy.mock.calls.map((call) => Number(call[1]));
+      expect(Math.max(...delays)).toBeLessThanOrEqual(MAX_TIMER_DELAY_MS);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+
+    // The first report carries the whole wait. The second comes after the first
+    // timer and carries the rest, so the window of a watchdog follows the wait.
+    const [first, second] = reports;
+    if (first === undefined) {
+      throw new Error('the replay made no report');
+    }
+    expect(first.scheduledWaitMs).toBeGreaterThan(MAX_TIMER_DELAY_MS);
+    expect(first.atMs + first.scheduledWaitMs).toBe(FIRST_EVENT_AT_MS + gapMs);
+    expect(second).toEqual({
+      seq: 0,
+      scheduledWaitMs: first.scheduledWaitMs - MAX_TIMER_DELAY_MS,
+      atMs: first.atMs + MAX_TIMER_DELAY_MS,
+    });
+  });
+
+  it('waits a recorded gap of 1 ms', async () => {
+    // The input event ends the flush of the first output, so the flush is
+    // the mark of the end of the wait before the input event.
+    const flushes = await replayAndRecordFlushes(
+      [outputEvent(0, 0), inputEvent(1, 1)],
+      RECORDED,
+    );
+
+    expect(flushes.map((flush) => flush.atMs)).toEqual([FIRST_EVENT_AT_MS + 1]);
   });
 
   it('keeps the recorded pace when continuous output fills every frame hold', async () => {
