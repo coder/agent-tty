@@ -2234,6 +2234,17 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     });
   });
 
+  it('waits a recorded gap of 1 ms', async () => {
+    // The input event ends the flush of the first output, so the flush is
+    // the mark of the end of the wait before the input event.
+    const flushes = await replayAndRecordFlushes(
+      [outputEvent(0, 0), inputEvent(1, 1)],
+      RECORDED,
+    );
+
+    expect(flushes.map((flush) => flush.atMs)).toEqual([FIRST_EVENT_AT_MS + 1]);
+  });
+
   it('keeps the recorded pace when continuous output fills every frame hold', async () => {
     const events = Array.from({ length: 101 }, (_, index) =>
       outputEvent(index, index * 10),

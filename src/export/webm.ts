@@ -26,16 +26,20 @@ import { resolveProfile } from '../renderer/profiles.js';
 import type { RenderProfileConfig, ReplayState } from '../renderer/types.js';
 import { invariant, unreachable } from '../util/assert.js';
 
-// The replay fails when the renderer makes no progress for this long. A healthy
-// replay is silent for a few seconds at most, in three places: from the start
-// to the first report (it sizes the terminal and holds one frame), inside one
-// page call (the call that ends a flush writes the chunks of the whole flush,
-// which the event log limit of 50 MiB bounds), and from the last report to the
-// end (the final frame hold, which also covers the glyph probes, and then a
-// read of the screen). On a loaded host at 600x150 the start took 1.5 s at most
-// and the end 2.3 s, and a flush of 52 MB took 2.8 s. The window is the old
-// fixed limit on the whole replay, so an export that fit before still fits.
-// Boot and finalize run outside the watchdog.
+// The replay fails when the renderer makes no progress for this long. A stretch
+// without a report is one page call or a fixed hold, never the whole replay: a
+// call carries at most 1000 chunks, and a report follows it. The stretches are
+// the start to the first report (the replay sizes the terminal and holds one
+// frame), one page call (the call that ends a flush also writes the chunks that
+// the earlier calls of the flush held, so the event log limit of 50 MiB bounds
+// it), and the last report to the end (the final frame hold, which also covers
+// the glyph probes, and then a read of the screen). Examples that I measured at
+// 600x150 on a shared host under load: the start took 1.3 to 2.0 s, the end 1.8
+// to 2.8 s, a flush of 11,000 events of 4 KB 8.4 s, and one stretch inside the
+// loop 4.4 s. These are examples and not bounds. The longest, 8.4 s, is under
+// 3% of the window. The window is the old fixed limit on the whole replay, so
+// an export that fit before still fits. Boot and finalize run outside the
+// watchdog.
 const REPLAY_STALL_WINDOW_MS = 5 * 60 * 1000;
 // Node runs a timer with a longer delay after 1 ms.
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
