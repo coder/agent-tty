@@ -140,20 +140,31 @@ const WASM_CONTENT_TYPE = 'application/wasm';
 const MAX_REPLAY_BATCH_SIZE = 1000;
 /**
  * Recorded time ends at most about this many flushes of a max-speed replay,
- * however long the recording is. A resize ends one more flush, and this limit
- * does not count it, so a log with many resizes makes more. A flush costs one
+ * however long the recording is. A resize that finds output waiting ends one
+ * more flush, and this limit does not count it, so a log with many resizes
+ * makes more (at most one more for each resize). A flush costs one
  * animation frame, one page call and one scan of the screen, and that cost
- * grows with the terminal size and the load of the host. Measured on PR 358:
- * 400 outputs 20 ms apart took 18 to 20 ms per flush at 80x24 (host CPU
- * pressure 4 to 22 %). A worst-case log of 2,400 full-screen repaints 17 ms
- * apart at 200x60 took 287 s (120 ms per flush) in two runs at pressure 15 to
- * 44 %, and 368 s (153 ms per flush) in a run of a verifier at pressure 23 to
- * 38 %. A WebM export allows its replay 5 minutes (REPLAY_TIMEOUT_MS), so a
- * loaded host can pass that limit at a large terminal size and fail the
- * export. The video has 25 frames per second, so this many flushes fill 96 s
- * of video.
+ * grows with the terminal size and the load of the host. At 80x24, 400
+ * outputs 20 ms apart took 18 to 20 ms per flush at host CPU pressure 4 to
+ * 22 %, and 400 outputs 40 ms apart took 27 to 54 ms per flush at pressure 38
+ * to 70 %. A worst-case log of 2,400 full-screen repaints 17 ms apart at
+ * 200x60 took 287 s (120 ms per flush) in two runs at pressure 15 to 44 %, and
+ * 368 s to 405 s (153 to 169 ms per flush) in three runs of a verifier at
+ * pressure 23 to 45 %. A WebM export allows its replay 5 minutes
+ * (REPLAY_TIMEOUT_MS), so a loaded host can pass that limit at a large
+ * terminal size and fail the export. The video has 25 frames per second and
+ * records the replay as it runs, so this many flushes of 40 ms or more make a
+ * video of 96 s or more.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
+/**
+ * The frames per second of the video. Playwright records 25 when the context
+ * sets no `recordVideo.fps`, and the context here sets this value, so the
+ * number does not depend on that default. A state of the page that stays on it
+ * for less than one video frame can be missing from the video.
+ */
+const VIDEO_FPS = 25;
+const VIDEO_FRAME_MS = 1000 / VIDEO_FPS;
 const RAF_TIMEOUT_MS = 5_000;
 
 let servedAssetsPromise: Promise<
@@ -718,7 +729,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     // Max-speed has no schedule that bounds its replay time, so it also
     // spreads a fixed number of its flushes over the recorded span: a sparse
     // recording then costs about the same number of frames as a dense one. A
-    // resize ends one more flush, and the budget does not count it.
+    // resize that finds output waiting ends one more flush, and the budget
+    // does not count it.
     const minSplitMs = Math.max(
       1,
       resolvedMinFrameHoldMs,
@@ -736,10 +748,21 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
     let pendingSinceTimestampMs: number | null = null;
     let scheduleStartedAtMs = 0;
     let scheduledElapsedMs = 0;
+    // Max-speed has no pauses, so the screen before a resize reaches the video
+    // only if it stays on the page for one video frame. A frame hold of 16 ms
+    // is shorter than that, and the recorder then misses the screen in some
+    // runs. Recorded and accelerated replays keep their pauses and their hold.
+    const preResizeHoldMs =
+      timing.mode === 'max-speed'
+        ? Math.max(resolvedMinFrameHoldMs, VIDEO_FRAME_MS)
+        : resolvedMinFrameHoldMs;
     // True after a flush that no hold followed. The next resize pays that hold.
     let lastFlushUnheld = false;
 
-    const flushOutputBatch = async (holdFrame = true): Promise<void> => {
+    const flushOutputBatch = async (
+      holdFrame = true,
+      holdMs = resolvedMinFrameHoldMs,
+    ): Promise<void> => {
       if (pendingOutputChunks.length === 0) {
         return;
       }
@@ -748,14 +771,14 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       pendingOutputChunks = [];
       pendingSinceTimestampMs = null;
       if (holdFrame) {
-        await waitForDelay(resolvedMinFrameHoldMs);
+        await waitForDelay(holdMs);
       }
       lastFlushUnheld = !holdFrame;
     };
     const holdAfterUnheldFlush = async (): Promise<void> => {
       if (lastFlushUnheld) {
         lastFlushUnheld = false;
-        await waitForDelay(resolvedMinFrameHoldMs);
+        await waitForDelay(preResizeHoldMs);
       }
     };
 
@@ -809,7 +832,8 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         // The frame wait of such a flush is already its frame, so max-speed
         // holds only after a flush that ends the replay or comes before a
         // resize (a resize is followed by a hold too): a hold after every
-        // flush would export 30 ms steps slower than they ran.
+        // flush would export 30 ms steps slower than they ran. The hold
+        // before a resize lasts one video frame, see preResizeHoldMs.
         if (
           pendingSinceTimestampMs !== null &&
           eventTimestampMs - pendingSinceTimestampMs >= minSplitMs &&
@@ -839,10 +863,9 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
           break;
         }
         case 'resize': {
-          await flushOutputBatch();
-          // A flush that the timestamp check made earlier has no hold, and
-          // the resize then finds nothing pending. The screen before the
-          // resize still needs its frame hold to reach the video.
+          // The flush here holds before the resize. A flush that the timestamp
+          // check made earlier has no hold, and the resize pays it now, once.
+          await flushOutputBatch(true, preResizeHoldMs);
           await holdAfterUnheldFlush();
           assertPositiveInteger(
             event.payload.cols,
@@ -1343,6 +1366,7 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
               recordVideo: {
                 dir: this.videoOptions.outputDir,
                 size: this.videoOptions.size,
+                fps: VIDEO_FPS,
               },
             }
           : {}),
