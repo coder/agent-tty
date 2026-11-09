@@ -1316,7 +1316,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
   // row by row, as the harness did before. Both must give the same lines,
   // cells and text for every screen. The harness decodes first in every
   // comparison, so a read in the task of a write or a resize cannot lean on an
-  // update that the per-row read made.
+  // update that the per-row read made. The page compares the two decodes and
+  // returns the differences: sending the cells of a large screen to the test
+  // costs far more than decoding them.
   it('decodes the visible lines and cells as the per-row read of the same screen does', async () => {
     await backend.boot();
     const { page } = backend as unknown as { page: Page };
@@ -1330,23 +1332,22 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       underline?: boolean;
       strikethrough?: boolean;
     }
-    interface Decoded {
+    interface Comparison {
       cols: number;
       rows: number;
-      visibleLines: { row: number; text: string }[];
-      scrollbackLines: { row: number; text: string }[];
-      cells: { lineNumber: number; cells: Cell[] }[];
+      scrollbackLength: number;
+      differences: string[];
+      cells: Cell[][];
     }
     const flush = async (chunks: string[]): Promise<void> => {
       await page.evaluate(
         `window.__agentTty.writeBatch(${JSON.stringify(chunks)}, true)`,
       );
     };
-    // Returns the cells of the screen, after the comparison passed. A script
-    // runs before the decodes, in the same task.
-    let scrollbackLength = 0;
-    const compare = async (script = ''): Promise<Cell[][]> => {
-      const { actual, text, expected } = (await page.evaluate(
+    // A script runs before the decodes, in the same task. The result holds the
+    // cells of the top rows of the screen, for the checks of its content.
+    const compare = async (script = '', topRows = 0): Promise<Comparison> => {
+      const comparison = (await page.evaluate(
         `(() => {
           ${script}
           const text = window.__agentTty.getVisibleText();
@@ -1355,19 +1356,48 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
             includeCells: true,
           });
           const expected = (${PER_ROW_DECODE})(globalThis.__decodedTerminal, true);
-          return { actual, text, expected };
+          const canon = (value) =>
+            JSON.stringify(value, (key, item) =>
+              item !== null && typeof item === 'object' && !Array.isArray(item)
+                ? Object.fromEntries(
+                    Object.entries(item).sort(([a], [b]) => (a < b ? -1 : 1)),
+                  )
+                : item,
+            );
+          const firstDifference = (name, left, right) => {
+            if (left.length !== right.length) {
+              return name + ': ' + left.length + ' rows against ' + right.length;
+            }
+            for (let row = 0; row < left.length; row += 1) {
+              if (canon(left[row]) !== canon(right[row])) {
+                return name + ' ' + row + ': ' + canon(left[row]).slice(0, 400) +
+                  ' against ' + canon(right[row]).slice(0, 400);
+              }
+            }
+            return null;
+          };
+          const differences = [
+            actual.cols === expected.cols && actual.rows === expected.rows
+              ? null
+              : 'size',
+            firstDifference('visibleLines', actual.visibleLines, expected.visibleLines),
+            firstDifference('scrollbackLines', actual.scrollbackLines, expected.scrollbackLines),
+            firstDifference('cells', actual.cells, expected.cells),
+            text === expected.visibleLines.map((line) => line.text).join('\\n')
+              ? null
+              : 'text',
+          ].filter((difference) => difference !== null);
+          return {
+            cols: actual.cols,
+            rows: actual.rows,
+            scrollbackLength: actual.scrollbackLines.length,
+            differences,
+            cells: actual.cells.slice(0, ${String(topRows)}).map((line) => line.cells),
+          };
         })()`,
-      )) as { actual: Decoded; text: string; expected: Decoded };
-      expect(actual.cols).toBe(expected.cols);
-      expect(actual.rows).toBe(expected.rows);
-      expect(actual.visibleLines).toEqual(expected.visibleLines);
-      expect(actual.scrollbackLines).toEqual(expected.scrollbackLines);
-      scrollbackLength = actual.scrollbackLines.length;
-      expect(actual.cells).toEqual(expected.cells);
-      expect(text).toBe(
-        expected.visibleLines.map((line) => line.text).join('\n'),
-      );
-      return actual.cells.map((line) => line.cells);
+      )) as Comparison;
+      expect(comparison.differences).toEqual([]);
+      return comparison;
     };
     const cellAt = (grid: Cell[][], row: number, col: number): Cell => {
       const cell = grid[row]?.[col];
@@ -1392,8 +1422,8 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     };
 
     // A blank screen, in the task of a resize that changes nothing.
-    const blank = await compare('window.__agentTty.resize(80, 24);');
-    const blankCell = cellAt(blank, 23, 79);
+    const blank = await compare('window.__agentTty.resize(80, 24);', 1);
+    const blankCell = cellAt(blank.cells, 0, 79);
     expect(blankCell.char).toBe('');
 
     // Every style, narrow and wide glyphs, combining marks, joined emoji,
@@ -1408,7 +1438,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       '\u{1F600}\u001b[1Dz  \u001b[5;80H\u65e5\u65e5',
       '\u001b[7;1H\ttab\t\u001b[5mblink\u001b[25m \u001b[8mhidden\u001b[28m',
     ]);
-    const mixed = await compare();
+    const mixed = (await compare('', 8)).cells;
     expect(cellAt(mixed, 0, 0)).toMatchObject({ char: 'b', bold: true });
     expect(cellAt(mixed, 0, 5)).toMatchObject({ char: 'i', italic: true });
     expect(cellAt(mixed, 0, 12)).toMatchObject({ char: 'u', underline: true });
@@ -1437,16 +1467,13 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
           `line ${String(line)} \u001b[3${String(line % 8)}m\u65e5\u672c\u001b[0m e\u0301 \u001b[1mbold\u001b[0m`,
       ).join('\r\n'),
     ]);
-    const scrolled = await compare();
-    expect(scrolled.length).toBe(24);
-    expect(scrollbackLength).toBeGreaterThan(30);
+    expect((await compare()).scrollbackLength).toBeGreaterThan(30);
 
     // The other screen has its own cells and returns the first screen's.
     await flush([
       '\u001b[?1049h\u001b[2J\u001b[Halt \u001b[7mscreen\u001b[0m \u{1F600} \u65e5',
     ]);
-    const alt = await compare();
-    expect(cellAt(alt, 0, 0).char).toBe('a');
+    expect(cellAt((await compare('', 1)).cells, 0, 0).char).toBe('a');
     await flush(['\u001b[?1049l']);
     await compare();
 
@@ -1455,8 +1482,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     // screen.
     const fresh = await compare(
       `void window.__agentTty.write('\\u001b[2J\\u001b[H\\u001b[1;31msync\\u001b[0m \\u65e5');`,
+      1,
     );
-    expect(cellAt(fresh, 0, 0)).toMatchObject({ char: 's', bold: true });
+    expect(cellAt(fresh.cells, 0, 0)).toMatchObject({ char: 's', bold: true });
 
     // The cell pool of ghostty-web grows with the screen and does not shrink.
     // After a shrink its cells past the screen still hold the larger screen,
@@ -1472,10 +1500,10 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       const resized = await compare(
         `window.__agentTty.resize(${String(cols)}, ${String(rows)});`,
       );
-      expect(resized.length).toBe(rows);
+      expect([resized.cols, resized.rows]).toEqual([cols, rows]);
       await flush([`\u001b[2J\u001b[H${text.repeat(cols * rows)}`]);
       const full = await compare();
-      sizes.push(`${String(full[0]?.length)}x${String(full.length)}`);
+      sizes.push(`${String(full.cols)}x${String(full.rows)}`);
     }
     expect(sizes).toEqual(['120x40', '40x10', '100x30', '200x60', '80x24']);
   });
