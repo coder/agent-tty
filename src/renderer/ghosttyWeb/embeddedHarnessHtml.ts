@@ -558,7 +558,6 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         const { cols, rows } = getNormalizedViewportState(terminal);
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
-        wasmTerm.update();
         const cells = wasmTerm.getViewport();
         invariant(
           cells.length >= rows * cols,
