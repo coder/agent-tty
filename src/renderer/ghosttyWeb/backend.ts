@@ -148,17 +148,20 @@ const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
  * more flush, and this limit does not count it, so a log with many resizes
  * makes more (at most one more for each resize). A flush costs one
  * animation frame, one page call and one scan of the screen, and that cost
- * grows with the terminal size and the load of the host. At 80x24, 400
- * outputs 20 ms apart took 18 to 20 ms per flush at host CPU pressure 4 to
- * 22 %, and 400 outputs 40 ms apart took 27 to 54 ms per flush at pressure 38
- * to 70 %. A worst-case log of 2,400 full-screen repaints 17 ms apart at
- * 200x60 took 287 s (120 ms per flush) in two runs at pressure 15 to 44 %, and
- * 368 s to 405 s (153 to 169 ms per flush) in three runs of a verifier at
- * pressure 23 to 45 %. A WebM export has no limit on the length of its replay,
- * so a loaded host makes it slower and does not fail it. The export fails only
- * when the renderer makes no progress for 5 minutes (REPLAY_STALL_WINDOW_MS in
- * webm.ts). The video has 25 frames per second and records the replay as it
- * runs, so this many flushes of 40 ms or more make a video of 96 s or more.
+ * grows with the terminal size and the load of the host. The scan of a full
+ * screen took 1 ms at 80x24, 5 ms at 200x60 and about 90 ms at 600x150 (median
+ * of 25 scans, at host CPU pressure 36 to 44 %: `some avg10` in
+ * /proc/pressure/cpu). The cost per flush below is the replay time divided by
+ * the number of flushes. At 80x24, 400 full-screen repaints 20 ms apart took 19
+ * to 29 ms per flush at pressure 7 to 32 % (five runs) and 35 to 72 ms at
+ * pressure 45 to 79 % (four runs). A worst-case log of 2,400 full-screen
+ * repaints 17 ms apart at 200x60 took 377 s (157 ms per flush) at pressure 21
+ * to 60 % and 459 s (191 ms per flush) at pressure 41 to 56 %. A WebM export
+ * has no limit on the length of its replay, so a loaded host makes it slower
+ * and does not fail it. The export fails only when the renderer makes no
+ * progress for 5 minutes (REPLAY_STALL_WINDOW_MS in webm.ts). The video has 25
+ * frames per second and records the replay as it runs, so this many flushes of
+ * 40 ms or more make a video of 96 s or more.
  */
 const MAX_SPEED_FRAME_BUDGET = 2_400;
 /**
