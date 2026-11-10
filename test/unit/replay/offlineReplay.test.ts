@@ -20,6 +20,7 @@ import {
   eventLogPath,
   manifestPath,
 } from '../../../src/storage/sessionPaths.js';
+import { MAX_ERROR_SUMMARY_CHARS } from '../../../src/util/errorSummary.js';
 
 interface OfflineReplayRunContext {
   manifest: SessionRecord;
@@ -683,11 +684,10 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.disposed).toBe(true);
   });
 
-  it('wraps replayTo errors as REPLAY_ERROR and disposes the backend', async () => {
-    const { sessionDir } = await createSessionFixture();
-    const backend = createMockBackend({
-      replayError: new Error('replay failed'),
-    });
+  it('wraps replayTo errors as REPLAY_ERROR that names the cause, and disposes the backend', async () => {
+    const { sessionDir, sessionId } = await createSessionFixture();
+    const replayError = new Error('replay failed');
+    const backend = createMockBackend({ replayError });
 
     const replayPromise = withOfflineReplayRenderer(
       { sessionDir },
@@ -698,10 +698,44 @@ describe('withOfflineReplayRenderer', () => {
     await expect(replayPromise).rejects.toBeInstanceOf(CliError);
     await expect(replayPromise).rejects.toMatchObject({
       code: ERROR_CODES.REPLAY_ERROR,
+      message: `Failed to boot or replay renderer for session ${sessionId}: replay failed`,
+      cause: replayError,
     });
     expect(backend.booted).toBe(true);
     expect(backend.replayedInput?.targetSeq).toBe(2);
     expect(backend.disposed).toBe(true);
+  });
+
+  // Playwright puts the stack and its call log after the cause. They are long,
+  // and they name source files, so the message keeps the first line only.
+  it('keeps the first line of a replay error and bounds its length', async () => {
+    const { sessionDir, sessionId } = await createSessionFixture();
+    const replayError = new Error(
+      [
+        `page.evaluate: RangeError: ${'x'.repeat(2000)}`,
+        '    at Terminal.write (http://127.0.0.1:41233/assets/ghostty-web.js:1:2)',
+      ].join('\n'),
+    );
+    const backend = createMockBackend({ replayError });
+
+    const failure = await withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.resolve('unreachable'),
+      { backendFactory: () => backend },
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CliError);
+    const { message } = failure as CliError;
+    const prefix = `Failed to boot or replay renderer for session ${sessionId}: page.evaluate: RangeError: xxx`;
+    expect(message.startsWith(prefix)).toBe(true);
+    expect(message.endsWith('…')).toBe(true);
+    expect(message).not.toContain('Terminal.write');
+    expect(message).not.toContain('\n');
+    expect(message.length).toBeLessThan(
+      `Failed to boot or replay renderer for session ${sessionId}: `.length +
+        MAX_ERROR_SUMMARY_CHARS +
+        1,
+    );
   });
 
   it('defaults replay state to the last event seq when no custom target is provided', async () => {
@@ -754,8 +788,8 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.disposed).toBe(true);
   });
 
-  it('wraps backend boot failures as REPLAY_ERROR and disposes the backend', async () => {
-    const { sessionDir } = await createSessionFixture();
+  it('wraps backend boot failures as REPLAY_ERROR that names the cause, and disposes the backend', async () => {
+    const { sessionDir, sessionId } = await createSessionFixture();
     const backend = createMockBackend({ bootError: new Error('boot failed') });
 
     const replayPromise = withOfflineReplayRenderer(
@@ -767,6 +801,7 @@ describe('withOfflineReplayRenderer', () => {
     await expect(replayPromise).rejects.toBeInstanceOf(CliError);
     await expect(replayPromise).rejects.toMatchObject({
       code: ERROR_CODES.REPLAY_ERROR,
+      message: `Failed to boot or replay renderer for session ${sessionId}: boot failed`,
     });
     expect(backend.booted).toBe(true);
     expect(backend.disposed).toBe(true);

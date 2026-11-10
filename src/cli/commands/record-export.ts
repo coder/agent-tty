@@ -60,6 +60,7 @@ import {
 } from '../../storage/outputPath.js';
 import { eventLogPath, manifestPath } from '../../storage/sessionPaths.js';
 import { invariant } from '../../util/assert.js';
+import { summarizeError } from '../../util/errorSummary.js';
 import { loadPackageMetadata } from '../../util/packageMetadata.js';
 
 const RecordExportFormatSchema = z.enum(['asciicast', 'webm', 'svg']);
@@ -617,10 +618,12 @@ export async function runRecordExportCommand(
       });
     }
 
+    const reason =
+      error instanceof GhosttyWebCrashedError
+        ? `. ${error.message}`
+        : `: ${summarizeError(error)}`;
     throw makeCliError(ERROR_CODES.EXPORT_ERROR, {
-      message: `Failed to export session "${options.sessionId}" as ${format}.${
-        error instanceof GhosttyWebCrashedError ? ` ${error.message}` : ''
-      }`,
+      message: `Failed to export session "${options.sessionId}" as ${format}${reason}`,
       details: {
         sessionId: options.sessionId,
         format,

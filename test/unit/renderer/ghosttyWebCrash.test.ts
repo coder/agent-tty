@@ -56,6 +56,27 @@ describe('describeReplayFailure', () => {
     expect(crash.message).toContain('(page.evaluate: Target crashed)');
   });
 
+  // The message must be true for every crash. An input without a full reset
+  // crashes the page too, so the reset of
+  // https://github.com/coder/ghostty-web/issues/215 is one known cause and
+  // not the cause.
+  it('names the issue as one known cause and says that other inputs crash the page', () => {
+    const crash = describeReplayFailure(CRASHED) as GhosttyWebCrashedError;
+
+    expect(crash.message).toContain(
+      'One known cause is https://github.com/coder/ghostty-web/issues/215',
+    );
+    expect(crash.message).toContain('several different inputs');
+  });
+
+  it('names the commands that do not use ghostty-web', () => {
+    const crash = describeReplayFailure(CRASHED) as GhosttyWebCrashedError;
+
+    expect(crash.message).toContain('libghostty-vt');
+    expect(crash.message).toContain('`record export --format svg`');
+    expect(crash.message).toContain('`record export --format asciicast`');
+  });
+
   // Real Playwright and harness messages that are not a crash. A looser
   // pattern (`/Target/`, `/crash/i`, `/crashed/`, or one that adds the
   // closed-page text) would call them one and release a healthy page.
