@@ -56,6 +56,27 @@ npm install "agent-tty@${PACKAGE_VERSION}"
 ./node_modules/.bin/agent-tty version --json
 ```
 
+## mise
+
+By default, mise does not run the install scripts of an npm tool's dependencies ([mise npm backend: build scripts](https://mise.jdx.dev/dev-tools/backends/npm.html#build-scripts-and-supply-chain-checks)).
+On Linux, `node-pty` builds its native module in an install script, so approve that build when you add the tool:
+
+```bash
+mise use -g node@26 'npm:agent-tty[allow_builds=node-pty]'
+agent-tty version --json
+```
+
+`node@26` makes Node 26 your global default, because mise does not add a Node version for an npm tool.
+If your global Node already satisfies `>=24 <27`, omit `node@26`.
+The build runs node-gyp, which needs Python, make, and a C++ compiler.
+
+On Linux, an install without `allow_builds=node-pty` fails on every `agent-tty` command with `Failed to load native module: pty.node`.
+To repair that install, run `mise uninstall npm:agent-tty`, then run the command above.
+mise skips a tool that is already installed, so the option alone does not rebuild it.
+
+mise asks for confirmation before it adds a package with few weekly downloads.
+In a non-interactive shell, mise refuses the package unless the options include `allow_low_downloads=true`, as in `'npm:agent-tty[allow_builds=node-pty,allow_low_downloads=true]'`.
+
 ## GitHub Release Tarballs
 
 ### Direct release asset install
