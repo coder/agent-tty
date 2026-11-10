@@ -75,7 +75,8 @@ To repair that install, run `mise uninstall npm:agent-tty`, then run the command
 mise skips a tool that is already installed, so the option alone does not rebuild it.
 
 mise asks for confirmation before it adds a package with few weekly downloads.
-In a non-interactive shell, mise refuses the package unless the options include `allow_low_downloads=true`, as in `'npm:agent-tty[allow_builds=node-pty,allow_low_downloads=true]'`.
+In a non-interactive shell, mise cannot ask, and it refuses the package unless you approve it.
+To approve only agent-tty, add `allow_low_downloads=true` to the options, as in `'npm:agent-tty[allow_builds=node-pty,allow_low_downloads=true]'`.
 
 ## GitHub Release Tarballs
 
