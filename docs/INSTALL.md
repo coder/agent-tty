@@ -19,6 +19,8 @@ npx playwright install chromium
 
 ## npm
 
+With npm 12, read [npm 12](#npm-12) first.
+
 ### Global install
 
 ```bash
@@ -56,6 +58,43 @@ npm install "agent-tty@${PACKAGE_VERSION}"
 ./node_modules/.bin/agent-tty version --json
 ```
 
+### npm 12
+
+npm 12 does not run the install scripts of dependencies by default.
+On Linux, `node-pty` builds its native module in an install script, so approve that script.
+Without the approval, every `agent-tty` command fails with `Failed to load native module: pty.node`.
+
+For a global install, add `--allow-scripts=node-pty`:
+
+```bash
+npm install -g --allow-scripts=node-pty agent-tty
+```
+
+npm 12 rejects that flag in a project-local install.
+There, approve the script in the `package.json` of the project, then rebuild `node-pty`:
+
+```bash
+npm install agent-tty
+npm approve-scripts node-pty
+npm rebuild node-pty
+```
+
+A tarball file takes the same approval as the registry package.
+npm 12 also refuses the release tarball URL and git sources by default.
+For the [direct release asset install](#direct-release-asset-install), add `--allow-remote=root`:
+
+```bash
+npm install -g --allow-remote=root --allow-scripts=node-pty "$TARBALL_URL"
+```
+
+For the [git source install](#git-source-install), add `--allow-git=root`:
+
+```bash
+npm install -g --allow-git=root --allow-scripts=node-pty github:coder/agent-tty
+```
+
+To repair an install that already fails with that error, run the commands for its install type.
+
 ## mise
 
 By default, mise does not run the install scripts of an npm tool's dependencies ([mise npm backend: build scripts](https://mise.jdx.dev/dev-tools/backends/npm.html#build-scripts-and-supply-chain-checks)).
@@ -63,12 +102,16 @@ On Linux, `node-pty` builds its native module in an install script, so approve t
 
 ```bash
 mise use -g node@26 'npm:agent-tty[allow_builds=node-pty]'
-agent-tty version --json
+mise exec -- agent-tty version --json
 ```
 
 `node@26` makes Node 26 your global default, because mise does not add a Node version for an npm tool.
 If your global Node already satisfies `>=24 <27`, omit `node@26`.
 The build runs node-gyp, which needs Python, make, and a C++ compiler.
+`mise exec --` runs the tool even when the mise shims are not on your `PATH`.
+`allow_builds` works with the default installer of mise.
+If you set `npm.package_manager` to `npm`, or `npm.shell_out` to `true`, the option needs npm 11.16 or later.
+This section was tested with mise 2026.10.25 and 2026.11.5.
 
 On Linux, an install without `allow_builds=node-pty` fails on every `agent-tty` command with `Failed to load native module: pty.node`.
 To repair that install, run `mise uninstall npm:agent-tty`, then run the command above.

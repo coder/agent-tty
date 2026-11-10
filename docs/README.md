@@ -5,7 +5,7 @@ Use this directory for focused user, contributor, and maintainer guides.
 
 ## Users
 
-- [`INSTALL.md`](./INSTALL.md) — npm, release tarball, source tarball, and git install paths.
+- [`INSTALL.md`](./INSTALL.md) — npm, mise, release tarball, source tarball, and git install paths.
 - [`USAGE.md`](./USAGE.md) — CLI workflows, command groups, examples, and anti-patterns.
 - [`AGENT-SKILLS.md`](./AGENT-SKILLS.md) — packaged agent skill usage and loader-specific installation notes.
 - [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) — environment, Playwright/Chromium, renderer, and platform troubleshooting.
