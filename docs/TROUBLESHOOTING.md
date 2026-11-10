@@ -19,7 +19,7 @@ Run the commands of that section instead.
 
 If the install command fails with `Playwright does not support chromium on <platform>`, that Playwright version has no Chromium build for your platform.
 When the platform is newer than that Playwright version, the build for an older release of the same operating system can work.
-Set `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` for the install command, for example `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` on Ubuntu 26.04 with Playwright 1.60.0.
+In that case, set `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` for the install command, for example `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` on Ubuntu 26.04 with Playwright 1.60.0.
 
 If your environment uses a custom browser cache, expose it with `PLAYWRIGHT_BROWSERS_PATH` and rerun:
 
