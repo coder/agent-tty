@@ -33,13 +33,16 @@ import { invariant, unreachable } from '../util/assert.js';
 // frame), one page call (the call that ends a flush also writes the chunks that
 // the earlier calls of the flush held, so the event log limit of 50 MiB bounds
 // it), and the last report to the end (the final frame hold, which also covers
-// the glyph probes, and then a read of the screen). Examples that I measured at
-// 600x150 on a shared host under load: the start took 1.3 to 2.0 s, the end 1.8
-// to 2.8 s, a flush of 11,000 events of 4 KB 8.4 s, and one stretch inside the
-// loop 4.4 s. These are examples and not bounds. The longest, 8.4 s, is under
-// 3% of the window. The window is the old fixed limit on the whole replay, so
-// an export that fit before still fits. Boot and finalize run outside the
-// watchdog.
+// the glyph probes, and then a read of the screen). Examples measured at
+// 600x150 on a shared host under load (host CPU pressure 34 to 57 %): the
+// start took 1.2 to 1.9 s and the end 1.1 to 1.4 s. One flush of 520
+// full-screen repaints of 93 KB (48.6 MB) had a longest stretch of 15.9 to
+// 20.7 s in three runs, 5.3 to 6.9 % of the window. One flush of 11,000
+// events of 4 KB (45 MB) had a longest stretch of 3.5 s and 5.8 s in two
+// runs. These are examples and not bounds: a stretch depends on the output
+// in one flush, the terminal size and the load of the host. The window is
+// the old fixed limit on the whole replay, so an export that fit before
+// still fits. Boot and finalize run outside the watchdog.
 const REPLAY_STALL_WINDOW_MS = 5 * 60 * 1000;
 // Node runs a timer with a longer delay after 1 ms.
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;

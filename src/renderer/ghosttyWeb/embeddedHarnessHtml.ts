@@ -408,8 +408,11 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
       // read each cell once per row. The pool that getViewport() returns never
       // shrinks, so it can hold more cells than the screen: the width of the
       // screen sets the row stride, not the length of the pool. No update() is
-      // needed first: a read in the task of a write or a resize sees the new
-      // screen.
+      // needed first after a write: a read in the task of a write sees the new
+      // screen. After a resize it holds only because the harness resizes with
+      // Terminal.resize of ghostty-web, which renders at once, and the render
+      // calls getCursor(), which calls update(): after a direct
+      // wasmTerm.resize(), getViewport() reads the old screen until update().
       function readViewportCells(wasmTerm, cols, rows) {
         const cells = wasmTerm.getViewport();
         invariant(
