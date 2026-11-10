@@ -24,6 +24,8 @@ AGENT_TTY_VERSION=$(agent-tty version --json | node -p 'JSON.parse(require("node
   npx "playwright@${PLAYWRIGHT_VERSION}" install chromium
 ```
 
+Unless the current folder is a project with that Playwright version installed, the install command prints a Playwright warning box that suggests `npm install` and a bare `npx playwright install`.
+Ignore that box: the command already installs the right build.
 A Playwright version looks only for the Chromium build that it was released with.
 Outside a project, a bare `npx playwright install chromium` runs the newest Playwright, and its build can differ from the one that agent-tty looks for.
 In a project-local install, `npx playwright install chromium` runs the Playwright of the project, which is the right one unless the project also depends on another Playwright version.

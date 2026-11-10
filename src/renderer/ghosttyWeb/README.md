@@ -53,7 +53,7 @@ This directory holds the `ghostty-web` reference renderer. `GhosttyWebBackend` s
 
 - Reads the `ghostty-web` package files (`ghostty-web.js`, its browser-external helper and `ghostty-vt.wasm`) with `fs/promises` once per process [backend.ts:getServedAssets].
 - Starts a `node:http` server on `127.0.0.1` with an ephemeral port. It serves the harness, the `ghostty-web` assets and the bundled fonts for `GET` and `HEAD` [backend.ts:GhosttyWebBackend.startServer].
-- Calls `ensurePlaywrightBrowsersPath()`, which can set `process.env.PLAYWRIGHT_BROWSERS_PATH`. Then it launches headless Chromium with `chromium.launch` [backend.ts:GhosttyWebBackend.bootInternal].
+- Calls `ensurePlaywrightBrowsersPath()`, which can set `process.env.PLAYWRIGHT_BROWSERS_PATH`. Then it launches headless Chromium with `chromium.launch` inside `withChromiumInstallHint`, so a missing browser executable fails the boot with an error that names the install command [backend.ts:GhosttyWebBackend.bootInternal].
 - Calls `page.evaluate` on `window.__agentTty` to write output, resize and read snapshots. One `writeBatch` call carries up to 1000 output chunks, and the page holds them until the last call of the flush [backend.ts:GhosttyWebBackend.writeBatchBridge].
 - `screenshot()` writes the PNG through Playwright `locator('#terminal').screenshot`, then reads it back to hash it [backend.ts:GhosttyWebBackend.screenshot].
 - With `videoOptions`, Playwright records into `outputDir`. `finalizeVideo()` closes the page and context and calls `video.saveAs(outputPath)` [backend.ts:GhosttyWebBackend.finalizeVideo].
