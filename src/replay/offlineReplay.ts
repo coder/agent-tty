@@ -21,6 +21,7 @@ import type { RenderProfileConfig, ReplayInput } from '../renderer/types.js';
 import { readManifestIfExists } from '../storage/manifests.js';
 import { eventLogPath, manifestPath } from '../storage/sessionPaths.js';
 import { invariant } from '../util/assert.js';
+import { summarizeError } from '../util/errorSummary.js';
 
 export interface OfflineReplayDeps {
   backendFactory?: (
@@ -132,11 +133,15 @@ async function readOfflineReplayInput(
   }
 }
 
+// The message names the failure that stopped the renderer, so a person does not
+// need the stack. A crash of the ghostty-web page carries its own explanation.
 function replayRendererError(sessionId: string, error: unknown): CliError {
+  const reason =
+    error instanceof GhosttyWebCrashedError
+      ? `. ${error.message}`
+      : `: ${summarizeError(error)}`;
   return makeCliError(ERROR_CODES.REPLAY_ERROR, {
-    message: `Failed to boot or replay renderer for session ${sessionId}.${
-      error instanceof GhosttyWebCrashedError ? ` ${error.message}` : ''
-    }`,
+    message: `Failed to boot or replay renderer for session ${sessionId}${reason}`,
     cause: error,
   });
 }

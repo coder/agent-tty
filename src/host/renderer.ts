@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
+import { CliError } from '../cli/errors.js';
 import { ERROR_CODES, makeCliError } from '../protocol/errors.js';
 import type { RendererBackend } from '../renderer/backend.js';
 import type { RendererName } from '../renderer/names.js';
@@ -41,6 +42,17 @@ function rethrowCrashAsReplayError(error: unknown): never {
     });
   }
   throw error;
+}
+
+// True for the error that `withBackend` throws when a ghostty-web page
+// crashed. The same output crashes the page again on every later call, so a
+// caller that retries a failed call must not retry this one.
+export function isReplayCrashError(error: unknown): boolean {
+  return (
+    error instanceof CliError &&
+    error.code === ERROR_CODES.REPLAY_ERROR &&
+    error.cause instanceof GhosttyWebCrashedError
+  );
 }
 
 function assertAbsolutePath(pathValue: string, label: string): void {

@@ -17,6 +17,7 @@ Small shared helpers that the rest of `src/` imports: fail-fast assertions, abor
 - `loadPackageMetadata()` and `PackageMetadata`: `{ name, version }` from the root `package.json`. `loadSupportedNodeRange()`: its `engines.node` range. [packageMetadata.ts:loadPackageMetadata] [packageMetadata.ts:loadSupportedNodeRange]
 - `satisfiesNodeRange(version, range)`: true when the Node version meets every space-separated `>=x[.y[.z]]` and `<x[.y[.z]]` comparator. A prerelease version (`x.y.z-tag`) satisfies no range, as in npm semver. [nodeRange.ts:satisfiesNodeRange]
 - `sha256Hex(text)`: lowercase SHA-256 hex digest of the UTF-8 text. [hash.ts:sha256Hex]
+- `summarizeError(error)` and `MAX_ERROR_SUMMARY_CHARS` (300): the first line of an error message, with whitespace collapsed, no stack frames and at most 300 characters (ending in `…` when cut). An error without a message gives its name. A value that is not an `Error` gives `String(value)`. [errorSummary.ts:summarizeError] [errorSummary.ts:MAX_ERROR_SUMMARY_CHARS]
 - `hasErrorCode(error, code)`: true when `error` is an `Error` with that `code`. [hasErrorCode.ts:hasErrorCode]
 - `isDirectExecution(importMetaUrl)`: true when the calling module is the script that `node` or `tsx` runs. [isDirectExecution.ts:isDirectExecution]
 - `isWithinRoot(rootPath, candidatePath)`: true when the resolved candidate is the root or below it. [isWithinRoot.ts:isWithinRoot]
@@ -40,7 +41,7 @@ Small shared helpers that the rest of `src/` imports: fail-fast assertions, abor
 - `loadPackageMetadata` and `loadSupportedNodeRange` read `package.json` with `fs/promises.readFile` through a URL relative to this module. [packageMetadata.ts:loadPackageMetadata]
 - `addAbortListener` adds a `once` listener to the signal and registers its removal in the scope. `waitForScopedOperation` starts a `setTimeout` and registers `clearTimeout` in the scope. [abort.ts:addAbortListener] [abort.ts:waitForScopedOperation]
 - `isDirectExecution` reads `process.argv[1]`. `sha256Hex` uses `node:crypto`. [isDirectExecution.ts:isDirectExecution] [hash.ts:sha256Hex]
-- `assert.ts`, `hasErrorCode.ts`, `isWithinRoot.ts`, `keyedSerializer.ts`, `lineDiff.ts` and `resourceScope.ts` do no I/O.
+- `assert.ts`, `errorSummary.ts`, `hasErrorCode.ts`, `isWithinRoot.ts`, `keyedSerializer.ts`, `lineDiff.ts` and `resourceScope.ts` do no I/O.
 
 ## Verification
 

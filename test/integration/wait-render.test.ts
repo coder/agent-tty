@@ -1,4 +1,4 @@
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { MAX_CONSECUTIVE_POLL_FAILURES } from '../../src/host/hostMain.js';
 import { sendRpc } from '../../src/host/rpcClient.js';
 import type {
   SnapshotResult,
@@ -606,6 +607,104 @@ describe('wait render integration', { timeout: 120_000 }, () => {
         message: 'fixture: replay failed',
       });
       expect(envelope).not.toHaveProperty('result');
+    } finally {
+      destroySession(testHome, failingSessionId);
+    }
+  });
+
+  // The fixture makes each ghostty-web replay of the host fail and counts the
+  // host's calls to its renderer. Each render poll is one call.
+  function injectedReplayFailureEnv(
+    failure: 'crash' | 'plain',
+    renderCallLog: string,
+  ): Record<string, string> {
+    const preload = pathToFileURL(
+      resolve('test/fixtures/inject-replay-failure.ts'),
+    );
+    return {
+      NODE_OPTIONS: [
+        process.env.NODE_OPTIONS ?? '',
+        `--import=${preload.href}`,
+      ].join(' '),
+      AGENT_TTY_TEST_REPLAY_FAILURE: failure,
+      AGENT_TTY_TEST_RENDER_CALL_LOG: renderCallLog,
+    };
+  }
+
+  async function countRenderCalls(renderCallLog: string): Promise<number> {
+    const text = await readFile(renderCallLog, 'utf8').catch(() => '');
+    return text.split('\n').filter((line) => line.length > 0).length;
+  }
+
+  it('ends a render wait at the first poll that crashes the ghostty-web page', async () => {
+    const renderCallLog = join(testHome, 'crash-render-calls.log');
+    const crashedSessionId = createSession(testHome, undefined, {
+      env: injectedReplayFailureEnv('crash', renderCallLog),
+    });
+    try {
+      const result = runCli(
+        [
+          '--renderer',
+          'ghostty-web',
+          'wait',
+          crashedSessionId,
+          '--text',
+          'NEVER',
+          '--timeout',
+          '60000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        90_000,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(10);
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope & {
+        result?: unknown;
+      };
+      expect(envelope.error).toMatchObject({
+        code: 'REPLAY_ERROR',
+        retryable: false,
+      });
+      expect(envelope.error.message).toContain(
+        "ghostty-web crashed while it replayed this session's output.",
+      );
+      expect(envelope).not.toHaveProperty('result');
+      // The wait does not poll again after the crash.
+      expect(await countRenderCalls(renderCallLog)).toBe(1);
+    } finally {
+      destroySession(testHome, crashedSessionId);
+    }
+  });
+
+  it('retries a render poll that fails for another reason until the cap', async () => {
+    const renderCallLog = join(testHome, 'plain-render-calls.log');
+    const failingSessionId = createSession(testHome, undefined, {
+      env: injectedReplayFailureEnv('plain', renderCallLog),
+    });
+    try {
+      const result = runCli(
+        [
+          '--renderer',
+          'ghostty-web',
+          'wait',
+          failingSessionId,
+          '--text',
+          'NEVER',
+          '--timeout',
+          '60000',
+          '--json',
+        ],
+        { AGENT_TTY_HOME: testHome },
+        90_000,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(9);
+      const envelope = JSON.parse(result.stdout) as ErrorEnvelope;
+      expect(envelope.error.code).toBe('RPC_ERROR');
+      expect(await countRenderCalls(renderCallLog)).toBe(
+        MAX_CONSECUTIVE_POLL_FAILURES,
+      );
     } finally {
       destroySession(testHome, failingSessionId);
     }

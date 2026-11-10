@@ -24,7 +24,7 @@ import {
   writeProgramRecord,
 } from './programGroup.js';
 import { buildReplayInput } from './replay.js';
-import { HostRendererManager } from './renderer.js';
+import { HostRendererManager, isReplayCrashError } from './renderer.js';
 import { RpcServer, type MethodHandler } from './rpcServer.js';
 import {
   RunCompletionCoordinator,
@@ -1173,7 +1173,14 @@ export async function runHost(
               }
 
               consecutiveFailures += 1;
-              if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+              // Another poll replays the same output into a new page, so a
+              // crash of the ghostty-web page ends the wait at once. Any other
+              // failure can pass (a browser that fails to launch under load),
+              // so those get MAX_CONSECUTIVE_POLL_FAILURES polls in a row.
+              if (
+                isReplayCrashError(pollError) ||
+                consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES
+              ) {
                 reject(
                   pollError instanceof Error
                     ? pollError

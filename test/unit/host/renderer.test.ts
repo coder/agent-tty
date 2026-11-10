@@ -5,8 +5,12 @@ import { setImmediate as setImmediatePromise } from 'node:timers/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { HostRendererManager } from '../../../src/host/renderer.js';
+import {
+  HostRendererManager,
+  isReplayCrashError,
+} from '../../../src/host/renderer.js';
 import { CliError } from '../../../src/cli/errors.js';
+import { ERROR_CODES, makeCliError } from '../../../src/protocol/errors.js';
 import { GhosttyWebCrashedError } from '../../../src/renderer/ghosttyWeb/index.js';
 import type { RendererBackend } from '../../../src/renderer/backend.js';
 import { iterateInRangeReplayEvents } from '../../../src/renderer/replayEvents.js';
@@ -345,6 +349,45 @@ describe('HostRendererManager', () => {
       retryable: false,
       cause: crash,
     });
+  });
+
+  // `waitForRender` ends its poll loop at this error and retries every other.
+  it('tells the error of a crashed page from every other poll failure', async () => {
+    const manager = new HostRendererManager({
+      sessionId: 'session-01',
+      sessionDir,
+      backendFactory,
+    });
+    const crash = new GhosttyWebCrashedError(
+      new Error('page.evaluate: Target crashed '),
+    );
+    backendFactory.mockImplementationOnce(() => {
+      const backend = createFakeBackend();
+      backend.replayTo = vi.fn(
+        (): Promise<ReplayState> => Promise.reject(crash),
+      );
+      backends.push(backend);
+      return backend;
+    });
+    const crashFailure: unknown = await manager
+      .getBackend('ghostty-web', createProfile(), createReplayInput())
+      .catch((error: unknown) => error);
+
+    expect(isReplayCrashError(crashFailure)).toBe(true);
+    // The errors of the other ways in which a poll fails.
+    expect(isReplayCrashError(crash)).toBe(false);
+    expect(
+      isReplayCrashError(new Error('page.evaluate: Target crashed ')),
+    ).toBe(false);
+    expect(
+      isReplayCrashError(
+        makeCliError(ERROR_CODES.REPLAY_ERROR, { message: 'replay failed' }),
+      ),
+    ).toBe(false);
+    expect(
+      isReplayCrashError(makeCliError(ERROR_CODES.RPC_ERROR, { cause: crash })),
+    ).toBe(false);
+    expect(isReplayCrashError('Target crashed')).toBe(false);
   });
 
   it('passes every other renderer failure through unchanged', async () => {

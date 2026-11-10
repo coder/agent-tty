@@ -1736,9 +1736,40 @@ describe('record export command', () => {
     expect((failure as { cause?: unknown }).cause).toBe(stall);
   });
 
-  it('keeps the generic message for other WebM export failures', async () => {
+  it('names the cause of other WebM export failures', async () => {
     mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
-    mocks.generateWebmExport.mockRejectedValue(new Error('replay failed'));
+    const replayError = new Error('replay failed');
+    mocks.generateWebmExport.mockRejectedValue(replayError);
+
+    const failure: unknown = await runRecordExportCommand({
+      context: TEST_CONTEXT,
+      json: true,
+      sessionId: 'session-01',
+      format: 'webm',
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toMatchObject({
+      code: ERROR_CODES.EXPORT_ERROR,
+      message: 'Failed to export session "session-01" as webm: replay failed',
+      cause: replayError,
+    });
+    expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
+  });
+
+  // Playwright puts the stack after the cause of a page error.
+  it('keeps the first line of a WebM export failure and leaves out its stack', async () => {
+    mocks.recordingFilename.mockReturnValue('recording-1-webm.webm');
+    mocks.generateWebmExport.mockRejectedValue(
+      new Error(
+        [
+          'page.evaluate: RangeError: offset is out of bounds',
+          '    at Terminal.write (http://127.0.0.1:41233/assets/ghostty-web.js:1:2)',
+        ].join('\n'),
+      ),
+    );
 
     await expect(
       runRecordExportCommand({
@@ -1749,12 +1780,12 @@ describe('record export command', () => {
       }),
     ).rejects.toMatchObject({
       code: ERROR_CODES.EXPORT_ERROR,
-      message: 'Failed to export session "session-01" as webm.',
+      message:
+        'Failed to export session "session-01" as webm: page.evaluate: RangeError: offset is out of bounds',
     });
-    expect(mocks.generateWebmExport).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the generic message for other event log read failures', async () => {
+  it('names the cause of other event log read failures', async () => {
     mocks.readEventLogRecords.mockRejectedValue(new Error('EIO'));
 
     await expect(
@@ -1766,7 +1797,7 @@ describe('record export command', () => {
       }),
     ).rejects.toMatchObject({
       code: ERROR_CODES.EXPORT_ERROR,
-      message: 'Failed to export session "session-01" as asciicast.',
+      message: 'Failed to export session "session-01" as asciicast: EIO',
     });
   });
 
