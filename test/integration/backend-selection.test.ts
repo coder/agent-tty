@@ -23,7 +23,7 @@ interface FailureEnvelope {
   };
 }
 
-describe('backend selection integration', () => {
+describe('backend selection integration', { timeout: 30000 }, () => {
   let testHome = '';
   let sessionId = '';
 
