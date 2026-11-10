@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -251,6 +251,13 @@ describe('doctor command', () => {
   it('fails browser_cache_accessible with an actionable message when the cache is missing', async () => {
     const missingCachePath = join(testHome, 'missing-browser-cache');
     process.env.PLAYWRIGHT_BROWSERS_PATH = missingCachePath;
+    // A bare `npx playwright` outside a project installs the browsers of the
+    // newest Playwright, so the hint must name the version that this package pins.
+    const packageJson = JSON.parse(
+      await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
+    ) as { dependencies: { playwright: string } };
+    const pinnedPlaywrightVersion = packageJson.dependencies.playwright;
+    expect(pinnedPlaywrightVersion).toMatch(/^\d+\.\d+\.\d+$/);
 
     const result = await runDoctorCheck(
       'browser_cache_accessible',
@@ -271,7 +278,7 @@ describe('doctor command', () => {
       status: 'fail',
       message:
         `Playwright browser cache not found at ${missingCachePath}. ` +
-        "Run 'npx playwright install chromium' to install.",
+        `Run 'npx playwright@${pinnedPlaywrightVersion} install chromium' to install.`,
     });
   });
 

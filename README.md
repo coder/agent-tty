@@ -40,7 +40,7 @@ Full reproducer, transcripts, and proof bundles are in [`dogfood/agent-uses-agen
 
 ## Quickstart
 
-Requires Node `>=24 <27`. Screenshots and WebM video also need a Playwright Chromium install (`npx playwright install chromium`).
+Requires Node `>=24 <27`. Screenshots and WebM video also need a Playwright Chromium install ([`docs/INSTALL.md`](./docs/INSTALL.md#chromium) has the commands).
 
 ```bash
 npm install -g agent-tty
@@ -70,7 +70,7 @@ agent-tty screenshot "$SID" --json
 agent-tty record export "$SID" --format webm --json
 ```
 
-More workflows are in [`docs/USAGE.md`](./docs/USAGE.md). Other install paths (mise, tarballs, prerelease channels, source checkouts) and the extra flags for npm 12 are in [`docs/INSTALL.md`](./docs/INSTALL.md).
+More workflows are in [`docs/USAGE.md`](./docs/USAGE.md). Other install paths (mise, tarballs, prerelease channels, source checkouts) and the extra steps for npm 12 are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 
 ## Why not just tmux, expect, asciinema, or Playwright?
 

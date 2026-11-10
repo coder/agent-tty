@@ -12,6 +12,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import {
   createConnection,
   createServer,
@@ -696,6 +697,24 @@ async function runPlaywrightAvailableCheck(): Promise<string> {
 const PLAYWRIGHT_BROWSER_DIRECTORY_PATTERN =
   /^(?:chromium(?:_headless_shell)?|firefox|webkit|msedge)-/;
 
+const require = createRequire(import.meta.url);
+
+// Outside a project, a bare `npx playwright` runs the newest Playwright. Its
+// Chromium build can differ from the one that the bundled Playwright looks
+// for, so the install command names the bundled version.
+async function resolveChromiumInstallCommand(): Promise<string> {
+  const playwrightPackage = JSON.parse(
+    await readFile(require.resolve('playwright/package.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  const playwrightVersion = playwrightPackage.version;
+  assert(
+    typeof playwrightVersion === 'string' &&
+      /^\d+\.\d+\.\d+/.test(playwrightVersion),
+    'playwright package.json version must be a semver string',
+  );
+  return `npx playwright@${playwrightVersion} install chromium`;
+}
+
 export async function runBrowserCacheAccessibleCheck(
   priorChecks: ReadonlyArray<DoctorCheck> = [],
 ): Promise<DoctorCheckOutcome> {
@@ -719,11 +738,11 @@ export async function runBrowserCacheAccessibleCheck(
     );
     assert(
       browserDirectory !== undefined,
-      `Playwright browser cache not found at ${browserCachePath}. Run 'npx playwright install chromium' to install.`,
+      `no Playwright browser directory in ${browserCachePath}`,
     );
   } catch (error) {
     throw new Error(
-      `Playwright browser cache not found at ${browserCachePath}. Run 'npx playwright install chromium' to install.`,
+      `Playwright browser cache not found at ${browserCachePath}. Run '${await resolveChromiumInstallCommand()}' to install.`,
       { cause: error },
     );
   }
