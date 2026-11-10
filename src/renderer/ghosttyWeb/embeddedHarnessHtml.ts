@@ -420,15 +420,11 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
       }
 
       // Whether a cell holds a character: the rule of getChars() in
-      // ghostty-web, which gives '' for codepoint 0 (a blank or a wide glyph's
-      // trailing spacer) and for a value that is not a Unicode scalar value.
+      // ghostty-web 0.4.0, which gives '' only for codepoint 0 (a blank or a
+      // wide glyph's trailing spacer). It maps any other value to a character,
+      // U+FFFD for a value that is not a Unicode scalar value.
       function cellHasChars(cell) {
-        const codepoint = cell.codepoint;
-        return (
-          codepoint !== 0 &&
-          codepoint <= 0x10ffff &&
-          !(codepoint >= 0xd800 && codepoint <= 0xdfff)
-        );
+        return cell.codepoint !== 0;
       }
 
       function decodeVisibleLines(terminal) {
