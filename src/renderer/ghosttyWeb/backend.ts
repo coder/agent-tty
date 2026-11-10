@@ -152,7 +152,7 @@ const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
  * screen took 1 ms at 80x24, 5 ms at 200x60 and about 90 ms at 600x150 (median
  * of 25 scans, at host CPU pressure 36 to 44 %: `some avg10` in
  * /proc/pressure/cpu). The cost per flush below is the replay time divided by
- * the number of flushes. At 80x24, 400 full-screen repaints 20 ms apart took 19
+ * the number of flushes. At 80x24, 400 full-screen repaints 20 ms apart took 18
  * to 29 ms per flush at pressure 7 to 32 % (five runs) and 35 to 72 ms at
  * pressure 45 to 79 % (four runs). A worst-case log of 2,400 full-screen
  * repaints 17 ms apart at 200x60 took 377 s (157 ms per flush) at pressure 21
