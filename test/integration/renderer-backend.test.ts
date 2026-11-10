@@ -1033,6 +1033,236 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(screenRows.slice(0, 32)).toEqual(expectedRows);
   });
 
+  // An output event with data "" passes the event schema, so a hand-made or
+  // older log can hold one anywhere. ghostty-web's terminal.write('') throws
+  // "RangeError: offset is out of bounds", so the page must not write it.
+  describe('empty output chunks', () => {
+    const outputEvents = (chunks: readonly string[]): ReplayInput['events'] =>
+      chunks.map((data, seq) => ({
+        seq,
+        ts: timestampFor(0),
+        type: 'output' as const,
+        payload: { data },
+      }));
+    const screenText = (
+      snapshot: Awaited<ReturnType<GhosttyWebBackend['snapshot']>>,
+    ): string =>
+      snapshot.visibleLines
+        .map((line) => line.text)
+        .join('\n')
+        .trimEnd();
+    const thousandXs = Array.from({ length: 1_000 }, () => 'x');
+
+    it.each([
+      ['in the middle of a flush', ['ab', '', 'cd'], 'abcd', 4],
+      ['at the start of a flush', ['', 'ab', 'cd'], 'abcd', 4],
+      ['as the last chunk of a flush', ['ab', 'cd', ''], 'abcd', 4],
+      ['as every chunk of a flush', ['', '', ''], '', 0],
+      [
+        'as the only chunk of the call that ends a flush of 1001 chunks',
+        [...thousandXs, ''],
+        `${'x'.repeat(80)}\n`.repeat(12) + 'x'.repeat(40),
+        40,
+      ],
+      [
+        'inside the first call of a flush of 1001 chunks',
+        [...thousandXs.slice(0, 500), '', ...thousandXs.slice(500)],
+        `${'x'.repeat(80)}\n`.repeat(12) + 'x'.repeat(40),
+        40,
+      ],
+    ])(
+      'replays an empty chunk %s',
+      async (_name, chunks, expectedText, expectedCursorCol) => {
+        await backend.boot();
+
+        const state = await backend.replayTo(
+          createReplayInput(outputEvents(chunks)),
+        );
+
+        expect(state.lastSeq).toBe(chunks.length - 1);
+        expect(screenText(await backend.snapshot())).toBe(expectedText);
+        expect(state.cursorCol).toBe(expectedCursorCol);
+      },
+    );
+
+    it('lets a direct page write take an empty string', async () => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      await page.evaluate('window.__agentTty.resize(80, 24)');
+
+      await page.evaluate(`window.__agentTty.write('')`);
+      await page.evaluate(`window.__agentTty.write('ok')`);
+      await page.evaluate(`window.__agentTty.write('')`);
+
+      expect(
+        await page.evaluate(
+          `window.__agentTty.getVisibleText().split('\\n')[0]`,
+        ),
+      ).toBe('ok');
+    });
+
+    // The call that ends a flush adds the graphemes on the screen to the set
+    // that the missing-glyph check probes, whether or not the flush wrote.
+    it('notes the painted graphemes in the call that ends a flush of only empty chunks', async () => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      await page.evaluate('window.__agentTty.resize(80, 24)');
+      const painted = (): Promise<{
+        seen: string[];
+        complete: boolean;
+      } | null> =>
+        page.evaluate(
+          `(() => {
+            const state = window.__agentTtyPainted;
+            return state === undefined ? null : { seen: [...state.seen], complete: state.complete };
+          })()`,
+        ) as Promise<{ seen: string[]; complete: boolean } | null>;
+
+      await page.evaluate(`window.__agentTty.writeBatch(['abc'], true, null)`);
+      expect(await painted()).toBeNull();
+
+      await page.evaluate(`window.__agentTty.writeBatch(['', ''], true, 5)`);
+      expect(await painted()).toEqual({
+        seen: ['a', 'b', 'c'],
+        complete: true,
+      });
+    });
+
+    // ghostty-web calls a write callback one animation frame after the write.
+    // With no frame coming, a flush that wrote something stays pending, and a
+    // flush of only empty chunks has nothing to wait for.
+    it('ends a flush of only empty chunks without waiting for a frame', async () => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      await page.evaluate('window.__agentTty.resize(80, 24)');
+
+      const settled = await page.evaluate(
+        `(async () => {
+          const requestFrame = window.requestAnimationFrame;
+          window.requestAnimationFrame = () => 0;
+          try {
+            const settles = (promise) =>
+              Promise.race([
+                promise.then(() => true),
+                new Promise((resolve) => setTimeout(() => resolve(false), 500)),
+              ]);
+            return [
+              await settles(window.__agentTty.writeBatch(['', ''], true)),
+              await settles(window.__agentTty.writeBatch(['x'], true)),
+            ];
+          } finally {
+            window.requestAnimationFrame = requestFrame;
+          }
+        })()`,
+      );
+
+      expect(settled).toEqual([true, false]);
+    });
+
+    it('replays empty output events in a timed replay as the log without them', async () => {
+      await backend.boot();
+      const resize = (seq: number, cols: number): ReplayInput['events'][0] => ({
+        seq,
+        ts: timestampFor(0),
+        type: 'resize',
+        payload: { cols, rows: 24 },
+      });
+      const output = (seq: number, data: string): ReplayInput['events'][0] => ({
+        seq,
+        ts: timestampFor(0),
+        type: 'output',
+        payload: { data },
+      });
+
+      // The timed replay leaves the empty events out of its flushes: [ab],
+      // then after the resizes [c, d]. The screen shows abcd, and the replay
+      // still applies the last event.
+      const state = await backend.replayWithTiming(
+        createReplayInput([
+          output(0, 'ab'),
+          output(1, ''),
+          resize(2, 81),
+          output(3, ''),
+          resize(4, 80),
+          output(5, 'c'),
+          output(6, ''),
+          output(7, 'd'),
+        ]),
+        { mode: 'max-speed', minFrameHoldMs: 16, finalFrameHoldMs: 16 },
+      );
+
+      expect(state.lastSeq).toBe(7);
+      expect(screenText(await backend.snapshot())).toBe('abcd');
+    });
+
+    it('shows the same text and the same screenshot as the log without the empty chunks', async () => {
+      // A log of 300 chunks on a screen of 40 columns and 10 rows: text,
+      // colours, line breaks, cursor moves and erases. It scrolls, so the
+      // scrollback and the visible rows both hold text. The twin has an empty
+      // chunk after about every third chunk.
+      let seed = 20_261_109;
+      const random = (limit: number): number => {
+        seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+        return seed % limit;
+      };
+      const pieces = [
+        'abc ',
+        'The quick brown fox ',
+        '\r\n',
+        '\r\n',
+        '\r\n',
+        '\u001b[31mred\u001b[0m ',
+        '\u001b[1;44mbold\u001b[0m ',
+        '\u001b[1A',
+        '\u001b[10C',
+        '\u001b[K',
+        '\u00e9\u4e2d ',
+      ];
+      const chunks = Array.from(
+        { length: 300 },
+        () => pieces[random(pieces.length)] ?? '',
+      );
+      const chunksWithEmpties = chunks.flatMap((chunk) =>
+        random(3) === 0 ? [chunk, ''] : [chunk],
+      );
+      expect(chunksWithEmpties.length).toBeGreaterThan(chunks.length);
+
+      const twin = new GhosttyWebBackend(`${SESSION_ID}-twin`, PROFILE);
+      // oxfmt-ignore
+      const outputDir = await realpath(await mkdtemp(join(tmpdir(), 'agent-tty-renderer-empty-')));
+      try {
+        await backend.boot();
+        await twin.boot();
+        const size = { initialCols: 40, initialRows: 10 };
+        await backend.replayTo(createReplayInput(outputEvents(chunks), size));
+        await twin.replayTo(
+          createReplayInput(outputEvents(chunksWithEmpties), {
+            ...size,
+            sessionId: `${SESSION_ID}-twin`,
+          }),
+        );
+
+        const plain = await backend.snapshot({ includeScrollback: true });
+        const withEmpties = await twin.snapshot({ includeScrollback: true });
+        expect(plain.scrollbackLines?.length).toBeGreaterThan(20);
+        expect(
+          plain.visibleLines.filter((line) => line.text.trim() !== '').length,
+        ).toBeGreaterThan(6);
+        expect(withEmpties.visibleLines).toEqual(plain.visibleLines);
+        expect(withEmpties.scrollbackLines).toEqual(plain.scrollbackLines);
+        expect(withEmpties.cursorRow).toBe(plain.cursorRow);
+        expect(withEmpties.cursorCol).toBe(plain.cursorCol);
+
+        const plainShot = await backend.screenshot(join(outputDir, 'a.png'));
+        const twinShot = await twin.screenshot(join(outputDir, 'b.png'));
+        expect(twinShot.sha256).toBe(plainShot.sha256);
+      } finally {
+        await twin.dispose();
+        await rm(outputDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   // A flush of 1001 chunks takes two page calls, and the glyph that it paints
   // comes with its last chunk. The next flush erases it.
   it('records the glyphs that a flush painted, in the page call that ends the flush', async () => {

@@ -706,6 +706,10 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
             state.heldChunks.length === 0,
             'write() cannot run while writeBatch() holds the chunks of a flush',
           );
+          if (data.length === 0) {
+            // An empty write changes nothing, and ghostty-web throws on it.
+            return;
+          }
 
           await new Promise((resolve) => {
             terminal.write(data, resolve);
@@ -738,8 +742,14 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
           // but ghostty-web calls a write callback one animation frame later,
           // so waiting on every chunk made a replay cost one frame per event.
           // The callback on the last chunk makes the call resolve after a frame.
+          // An empty chunk changes nothing, and ghostty-web throws a RangeError
+          // on terminal.write(''), so the page drops it here. The callback then
+          // goes to the last chunk that is written, and a flush of empty chunks
+          // writes nothing and waits for no frame.
           for (const chunk of chunks) {
-            state.heldChunks.push(chunk);
+            if (chunk.length > 0) {
+              state.heldChunks.push(chunk);
+            }
           }
           if (!endsFlush) {
             return null;
@@ -747,14 +757,16 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
 
           const flush = state.heldChunks;
           state.heldChunks = [];
-          const lastIndex = flush.length - 1;
-          for (let index = 0; index < lastIndex; index += 1) {
-            terminal.write(flush[index]);
+          if (flush.length > 0) {
+            const lastIndex = flush.length - 1;
+            for (let index = 0; index < lastIndex; index += 1) {
+              terminal.write(flush[index]);
+            }
+            await new Promise((resolve) => {
+              terminal.write(flush[lastIndex], resolve);
+            });
+            updateDocumentState();
           }
-          await new Promise((resolve) => {
-            terminal.write(flush[lastIndex], resolve);
-          });
-          updateDocumentState();
 
           // The caller asks to note the painted graphemes of a recorded
           // replay here, so a flush costs one page call and not two. A failed

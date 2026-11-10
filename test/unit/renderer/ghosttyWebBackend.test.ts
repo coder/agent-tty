@@ -2434,4 +2434,273 @@ describe('GhosttyWebBackend replayWithTiming output pacing', () => {
     expect(flushes.length).toBeGreaterThanOrEqual(30);
     expect(flushes.at(-1)?.atMs).toBeLessThanOrEqual(FIRST_EVENT_AT_MS + 1_020);
   });
+
+  // An output event with empty data changes no pixel. A timed replay takes it
+  // out of the recording, so the replay of a log that holds one is the replay
+  // of the log without it: the same steps at the same times.
+  describe('with output events that have empty data', () => {
+    type Step = readonly [
+      kind: 'out' | 'empty' | 'input' | 'resize' | 'exit',
+      offsetMs: number,
+    ];
+    const ACCELERATED: ReplayTimingOptions = {
+      mode: 'accelerated',
+      maxGapMs: 400,
+      minFrameHoldMs: 100,
+      finalFrameHoldMs: 1_000,
+    };
+    const MODES = [
+      ['recorded', RECORDED],
+      ['accelerated', ACCELERATED],
+      ['max-speed', MAX_SPEED],
+    ] as const;
+
+    function chunkEvent(
+      seq: number,
+      offsetMs: number,
+      data: string,
+    ): ReplayInput['events'][number] {
+      return {
+        seq,
+        ts: new Date(BASE_TIMESTAMP_MS + offsetMs).toISOString(),
+        type: 'output',
+        payload: { data },
+      };
+    }
+
+    // The data of an output is its place among the outputs that have data, so
+    // a log and its twin without the empty events carry the same chunks.
+    function buildLog(steps: readonly Step[]): ReplayInput['events'] {
+      let outputs = 0;
+      return steps.map(([kind, offsetMs], seq) => {
+        switch (kind) {
+          case 'out': {
+            outputs += 1;
+            return chunkEvent(seq, offsetMs, `o${String(outputs)}`);
+          }
+          case 'empty':
+            return chunkEvent(seq, offsetMs, '');
+          case 'input':
+            return inputEvent(seq, offsetMs);
+          case 'resize':
+            return resizeEvent(seq, offsetMs);
+          case 'exit':
+            return exitEvent(seq, offsetMs);
+        }
+      });
+    }
+    const withoutEmpties = (steps: readonly Step[]): readonly Step[] =>
+      steps.filter(([kind]) => kind !== 'empty');
+    const flushSteps = (
+      timeline: readonly { step: string; atMs: number }[],
+    ): string[] =>
+      timeline
+        .map((entry) => entry.step)
+        .filter((step) => step.startsWith('flush'));
+
+    const SCENARIOS: readonly (readonly [string, readonly Step[]])[] = [
+      [
+        'before an input',
+        [
+          ['out', 0],
+          ['empty', 20],
+          ['input', 30],
+          ['out', 400],
+          ['exit', 500],
+        ],
+      ],
+      [
+        'before a resize',
+        [
+          ['out', 0],
+          ['empty', 5],
+          ['resize', 10],
+          ['out', 300],
+          ['exit', 400],
+        ],
+      ],
+      [
+        'before an exit',
+        [
+          ['out', 0],
+          ['empty', 5],
+          ['exit', 200],
+        ],
+      ],
+      [
+        'between two outputs of one flush',
+        [
+          ['out', 0],
+          ['empty', 5],
+          ['out', 10],
+          ['exit', 500],
+        ],
+      ],
+      [
+        'between two outputs of two flushes',
+        [
+          ['out', 0],
+          ['empty', 20],
+          ['out', 35],
+          ['out', 40],
+          ['exit', 500],
+        ],
+      ],
+      [
+        'before the first output',
+        [
+          ['empty', 0],
+          ['out', 60],
+          ['out', 110],
+          ['out', 2_000],
+          ['exit', 2_100],
+        ],
+      ],
+      [
+        'after the last output',
+        [
+          ['out', 0],
+          ['out', 20],
+          ['empty', 60],
+          ['exit', 500],
+        ],
+      ],
+      [
+        'far after the last output, which spreads the frame budget over its time',
+        [
+          ['out', 0],
+          ['out', 20],
+          ['out', 40],
+          ['empty', 100_000_000],
+        ],
+      ],
+      [
+        'before each of 20 inputs',
+        [
+          ...Array.from({ length: 20 }, (_, index): Step[] => [
+            ['out', index * 100],
+            ['empty', index * 100 + 20],
+            ['input', index * 100 + 30],
+          ]).flat(),
+          ['exit', 2_100],
+        ],
+      ],
+    ];
+
+    it.each(
+      SCENARIOS.flatMap(([name, steps]) =>
+        MODES.map(([mode, timing]) => [name, mode, steps, timing] as const),
+      ),
+    )(
+      'replays an empty output event %s as a log without it, in %s mode',
+      async (_name, _mode, steps, timing) => {
+        const twin = await replayAndRecordTimeline(
+          buildLog(withoutEmpties(steps)),
+          timing,
+        );
+        const timeline = await replayAndRecordTimeline(buildLog(steps), timing);
+
+        expect(flushSteps(twin).length).toBeGreaterThan(0);
+        expect(timeline).toEqual(twin);
+      },
+    );
+
+    it('keeps the outputs of an accelerated replay in the flushes that they share without the empty event', async () => {
+      const timeline = await replayAndRecordTimeline(
+        buildLog([
+          ['empty', 0],
+          ['out', 60],
+          ['out', 110],
+          ['out', 2_000],
+          ['exit', 2_100],
+        ]),
+        ACCELERATED,
+      );
+
+      expect(flushSteps(timeline)).toEqual(['flush o1,o2', 'flush o3']);
+    });
+
+    it('ends a max-speed flush where the log without the empty event ends it', async () => {
+      const timeline = await replayAndRecordTimeline(
+        buildLog([
+          ['out', 0],
+          ['empty', 20],
+          ['out', 35],
+          ['out', 40],
+        ]),
+        MAX_SPEED,
+      );
+
+      expect(flushSteps(timeline)).toEqual(['flush o1', 'flush o2,o3']);
+    });
+
+    // The replay still applies the event: the seq that the replay returns and
+    // the seq that its progress reports carry reach it.
+    async function replayLog(steps: readonly Step[]): Promise<{
+      lastSeq: number;
+      reportedSeqs: number[];
+      flushes: string[][];
+    }> {
+      vi.useFakeTimers();
+      const backend = createBackend();
+      const flushes: string[][] = [];
+      Object.assign(backend as object, {
+        isBooted: true,
+        page: { isClosed: () => false },
+        resizeBridge: () => Promise.resolve(),
+        flushOutputBatch: (_page: object, dataChunks: string[]) => {
+          flushes.push([...dataChunks]);
+          return Promise.resolve();
+        },
+        readHarnessSnapshot: () =>
+          Promise.resolve(
+            createHarnessSnapshotPayload({
+              cols: 80,
+              rows: 24,
+              visibleLines: [],
+            }),
+          ),
+      });
+      const reportedSeqs: number[] = [];
+      const events = buildLog(steps);
+      const replay = backend.replayWithTiming(
+        {
+          sessionId: 'renderer-unit-session',
+          initialCols: 80,
+          initialRows: 24,
+          targetSeq: events.length - 1,
+          events,
+        },
+        RECORDED,
+        (progress) => {
+          reportedSeqs.push(progress.seq);
+        },
+      );
+      await vi.runAllTimersAsync();
+      const state = await replay;
+      return { lastSeq: state.lastSeq, reportedSeqs, flushes };
+    }
+
+    it('applies a trailing empty output event: the last seq and the last progress report reach it', async () => {
+      const replayed = await replayLog([
+        ['out', 0],
+        ['empty', 10],
+        ['empty', 20],
+      ]);
+
+      expect(replayed.flushes).toEqual([['o1']]);
+      expect(replayed.lastSeq).toBe(2);
+      expect(replayed.reportedSeqs.at(-1)).toBe(2);
+    });
+
+    it('writes nothing for a log of empty output events, and applies them', async () => {
+      const replayed = await replayLog([
+        ['empty', 0],
+        ['empty', 10],
+      ]);
+
+      expect(replayed.flushes).toEqual([]);
+      expect(replayed.lastSeq).toBe(1);
+    });
+  });
 });
