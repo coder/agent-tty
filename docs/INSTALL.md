@@ -63,12 +63,16 @@ On Linux, `node-pty` builds its native module in an install script, so approve t
 
 ```bash
 mise use -g node@26 'npm:agent-tty[allow_builds=node-pty]'
-agent-tty version --json
+mise exec -- agent-tty version --json
 ```
 
 `node@26` makes Node 26 your global default, because mise does not add a Node version for an npm tool.
 If your global Node already satisfies `>=24 <27`, omit `node@26`.
 The build runs node-gyp, which needs Python, make, and a C++ compiler.
+`mise exec --` runs the tool even when the mise shims are not on your `PATH`.
+`allow_builds` works with the default installer of mise.
+If you set `npm.package_manager` to `npm`, the option needs npm 11.16 or later.
+This section was tested with mise 2026.10.25 and 2026.11.5.
 
 On Linux, an install without `allow_builds=node-pty` fails on every `agent-tty` command with `Failed to load native module: pty.node`.
 To repair that install, run `mise uninstall npm:agent-tty`, then run the command above.

@@ -75,13 +75,22 @@ Do not mix `--home` and `AGENT_TTY_HOME` values unless you intentionally want se
 The npm package and release tarball are the preferred install routes because they use packaged artifacts.
 Direct git installs build from source through npm's `prepare` hook and are best-effort.
 
-If a git install fails because native dependencies cannot build, use:
+If a git install fails, use:
 
 ```bash
 npm install -g agent-tty
 ```
 
 or install a GitHub Release tarball as described in [`INSTALL.md`](./INSTALL.md).
+Both routes skip the `prepare` build of agent-tty.
+On Linux, they still build the native module of `node-pty` with node-gyp, because `node-pty` ships no prebuilt Linux binary.
+That build needs Python, make, and a C++ compiler.
+
+## A Command Says `Failed to load native module: pty.node`
+
+On Linux, every `agent-tty` command fails with this error when the install did not run the install script of `node-pty`, so the native module was never built.
+mise skips that script by default.
+The [mise section of `INSTALL.md`](./INSTALL.md#mise) has the command that approves the build and the repair for an existing install.
 
 ## Platform Notes
 

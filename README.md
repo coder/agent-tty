@@ -70,7 +70,7 @@ agent-tty screenshot "$SID" --json
 agent-tty record export "$SID" --format webm --json
 ```
 
-More workflows are in [`docs/USAGE.md`](./docs/USAGE.md). Other install paths (tarballs, prerelease channels, source checkouts) are in [`docs/INSTALL.md`](./docs/INSTALL.md).
+More workflows are in [`docs/USAGE.md`](./docs/USAGE.md). Other install paths (mise, tarballs, prerelease channels, source checkouts) are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 
 ## Why not just tmux, expect, asciinema, or Playwright?
 
