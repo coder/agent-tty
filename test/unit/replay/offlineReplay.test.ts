@@ -706,13 +706,13 @@ describe('withOfflineReplayRenderer', () => {
     expect(backend.disposed).toBe(true);
   });
 
-  // Playwright puts the stack and its call log after the cause. They are long,
-  // and they name source files, so the message keeps the first line only.
-  it('keeps the first line of a replay error and bounds its length', async () => {
+  // Playwright puts the stack after the cause. It is long, and it names source
+  // files, so the message keeps the first line only.
+  it('leaves the stack of a replay error out of the message', async () => {
     const { sessionDir, sessionId } = await createSessionFixture();
     const replayError = new Error(
       [
-        `page.evaluate: RangeError: ${'x'.repeat(2000)}`,
+        'page.evaluate: RangeError: offset is out of bounds',
         '    at Terminal.write (http://127.0.0.1:41233/assets/ghostty-web.js:1:2)',
       ].join('\n'),
     );
@@ -725,17 +725,31 @@ describe('withOfflineReplayRenderer', () => {
     ).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(CliError);
-    const { message } = failure as CliError;
-    const prefix = `Failed to boot or replay renderer for session ${sessionId}: page.evaluate: RangeError: xxx`;
-    expect(message.startsWith(prefix)).toBe(true);
-    expect(message.endsWith('…')).toBe(true);
-    expect(message).not.toContain('Terminal.write');
-    expect(message).not.toContain('\n');
-    expect(message.length).toBeLessThan(
-      `Failed to boot or replay renderer for session ${sessionId}: `.length +
-        MAX_ERROR_SUMMARY_CHARS +
-        1,
+    expect((failure as CliError).message).toBe(
+      `Failed to boot or replay renderer for session ${sessionId}: page.evaluate: RangeError: offset is out of bounds`,
     );
+  });
+
+  it('bounds the length of the cause of a replay error', async () => {
+    const { sessionDir, sessionId } = await createSessionFixture();
+    const backend = createMockBackend({
+      replayError: new Error(`page.evaluate: RangeError: ${'x'.repeat(2000)}`),
+    });
+
+    const failure = await withOfflineReplayRenderer(
+      { sessionDir },
+      () => Promise.resolve('unreachable'),
+      { backendFactory: () => backend },
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CliError);
+    const { message } = failure as CliError;
+    const prefix = `Failed to boot or replay renderer for session ${sessionId}: `;
+    expect(message.startsWith(`${prefix}page.evaluate: RangeError: xxx`)).toBe(
+      true,
+    );
+    expect(message.endsWith('…')).toBe(true);
+    expect(message).toHaveLength(prefix.length + MAX_ERROR_SUMMARY_CHARS);
   });
 
   it('defaults replay state to the last event seq when no custom target is provided', async () => {
