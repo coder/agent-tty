@@ -1511,6 +1511,67 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(sizes).toEqual(['120x40', '40x10', '100x30', '200x60', '80x24']);
   });
 
+  // ghostty-web's getChars() gives '' for codepoint 0 and a character for every
+  // other value, U+FFFD for one that is no Unicode scalar value. A snapshot and
+  // the scan must follow that rule, also for values that the terminal does not
+  // write. The page plants the value in the first cell of the viewport read.
+  it('says a cell with any codepoint but 0 has a character, as the per-row read does', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await keepDecodedTerminal(page);
+    await page.evaluate(
+      `window.__agentTty.writeBatch(["\\u001b[2J\\u001b[Hhello"], true)`,
+    );
+
+    const answers: Record<
+      string,
+      { cell: string; scan: string; reference: string }
+    > = {};
+    for (const codepoint of [
+      0, 0x41, 0xd7ff, 0xd800, 0xdfff, 0xe000, 0x10ffff, 0x110000, 0x1fffff,
+    ]) {
+      answers[codepoint.toString(16)] = (await page.evaluate(
+        `(() => {
+          const wasmTerm = globalThis.__decodedTerminal.wasmTerm;
+          const getViewport = wasmTerm.getViewport.bind(wasmTerm);
+          wasmTerm.getViewport = () => {
+            const cells = getViewport();
+            cells[0].codepoint = ${String(codepoint)};
+            return cells;
+          };
+          try {
+            const snapshot = window.__agentTty.getSnapshot({ includeCells: true });
+            const scan = window.__agentTty.getCellGraphemes();
+            const reference = (${PER_ROW_DECODE})(globalThis.__decodedTerminal, false);
+            return {
+              cell: snapshot.cells[0].cells[0].char,
+              scan: scan[0][0],
+              reference: reference.cells[0].cells[0].char,
+            };
+          } finally {
+            delete wasmTerm.getViewport;
+          }
+        })()`,
+      )) as { cell: string; scan: string; reference: string };
+    }
+
+    // The grapheme of the first cell is 'h', whatever codepoint the planted
+    // cell holds, so the answer is 'h' when the cell has a character.
+    const hasCharacter = { cell: 'h', scan: 'h', reference: 'h' };
+    const blank = { cell: '', scan: '', reference: '' };
+    expect(answers).toEqual({
+      '0': blank,
+      '41': hasCharacter,
+      d7ff: hasCharacter,
+      d800: hasCharacter,
+      dfff: hasCharacter,
+      e000: hasCharacter,
+      '10ffff': hasCharacter,
+      '110000': hasCharacter,
+      '1fffff': hasCharacter,
+    });
+  });
+
   it('allows dispose to be called more than once', async () => {
     await backend.boot();
 
