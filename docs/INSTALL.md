@@ -19,9 +19,9 @@ Screenshots and WebM video need the Chromium build of the Playwright version tha
 For a global install or a mise install of a published release, look that version up and install its Chromium:
 
 ```bash
-AGENT_TTY_VERSION=$(agent-tty version --json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).result.cliVersion')
-PLAYWRIGHT_VERSION=$(npm view "agent-tty@${AGENT_TTY_VERSION}" dependencies.playwright)
-npx "playwright@${PLAYWRIGHT_VERSION}" install chromium
+AGENT_TTY_VERSION=$(agent-tty version --json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).result.cliVersion') &&
+  PLAYWRIGHT_VERSION=$(npm view "agent-tty@${AGENT_TTY_VERSION}" dependencies.playwright) &&
+  npx "playwright@${PLAYWRIGHT_VERSION}" install chromium
 ```
 
 A Playwright version looks only for the Chromium build that it was released with.

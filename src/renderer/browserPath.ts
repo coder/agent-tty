@@ -1,4 +1,7 @@
+import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import process from 'node:process';
 
@@ -115,4 +118,50 @@ export function ensurePlaywrightBrowsersPath(
   }
 
   return resolution;
+}
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Returns the command that installs the Chromium build of the bundled
+ * Playwright. Outside a project, a bare `npx playwright` runs the newest
+ * Playwright, and its Chromium build can differ from the one that the bundled
+ * Playwright looks for, so the command names the bundled version.
+ */
+export async function resolveChromiumInstallCommand(): Promise<string> {
+  const playwrightPackage = JSON.parse(
+    await readFile(require.resolve('playwright/package.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  const playwrightVersion = playwrightPackage.version;
+  assert(
+    typeof playwrightVersion === 'string' &&
+      /^\d+\.\d+\.\d+/.test(playwrightVersion),
+    'playwright package.json version must be a semver string',
+  );
+  return `npx playwright@${playwrightVersion} install chromium`;
+}
+
+/**
+ * Runs a Chromium launch. When Playwright cannot find its browser executable,
+ * its own text suggests a bare `npx playwright install`. This keeps the first
+ * line of that error, which names the path, and gives the command from
+ * `resolveChromiumInstallCommand` instead. Every other error passes through.
+ */
+export async function withChromiumInstallHint<TResult>(
+  launch: () => Promise<TResult>,
+): Promise<TResult> {
+  try {
+    return await launch();
+  } catch (error) {
+    const [firstLine = ''] = (
+      error instanceof Error ? error.message : String(error)
+    ).split('\n');
+    if (!firstLine.includes("Executable doesn't exist")) {
+      throw error;
+    }
+    throw new Error(
+      `${firstLine}. Run '${await resolveChromiumInstallCommand()}' to install.`,
+      { cause: error },
+    );
+  }
 }

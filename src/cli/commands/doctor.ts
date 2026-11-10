@@ -12,7 +12,6 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import {
   createConnection,
   createServer,
@@ -33,7 +32,11 @@ import {
   removeSocketDirectoryBestEffort,
 } from '../../host/lifecycle.js';
 import { createPty } from '../../pty/createPty.js';
-import { resolveDefaultPlaywrightBrowsersPath } from '../../renderer/browserPath.js';
+import {
+  resolveChromiumInstallCommand,
+  resolveDefaultPlaywrightBrowsersPath,
+  withChromiumInstallHint,
+} from '../../renderer/browserPath.js';
 import { discoverCapabilities } from '../../renderer/capabilities.js';
 import { probeLibghosttyVt } from '../../renderer/readiness.js';
 import {
@@ -697,24 +700,6 @@ async function runPlaywrightAvailableCheck(): Promise<string> {
 const PLAYWRIGHT_BROWSER_DIRECTORY_PATTERN =
   /^(?:chromium(?:_headless_shell)?|firefox|webkit|msedge)-/;
 
-const require = createRequire(import.meta.url);
-
-// Outside a project, a bare `npx playwright` runs the newest Playwright. Its
-// Chromium build can differ from the one that the bundled Playwright looks
-// for, so the install command names the bundled version.
-async function resolveChromiumInstallCommand(): Promise<string> {
-  const playwrightPackage = JSON.parse(
-    await readFile(require.resolve('playwright/package.json'), 'utf8'),
-  ) as Record<string, unknown>;
-  const playwrightVersion = playwrightPackage.version;
-  assert(
-    typeof playwrightVersion === 'string' &&
-      /^\d+\.\d+\.\d+/.test(playwrightVersion),
-    'playwright package.json version must be a semver string',
-  );
-  return `npx playwright@${playwrightVersion} install chromium`;
-}
-
 export async function runBrowserCacheAccessibleCheck(
   priorChecks: ReadonlyArray<DoctorCheck> = [],
 ): Promise<DoctorCheckOutcome> {
@@ -750,12 +735,18 @@ export async function runBrowserCacheAccessibleCheck(
   return `browser cache accessible: ${browserCachePath}`;
 }
 
-async function runBrowserLaunchCheck(): Promise<string> {
+function launchChromium(chromium: ChromiumLike): Promise<BrowserLike> {
+  return withChromiumInstallHint(() =>
+    chromium.launch({
+      headless: true,
+      timeout: CHECK_TIMEOUT_MS,
+    }),
+  );
+}
+
+export async function runBrowserLaunchCheck(): Promise<string> {
   const chromium = await getPlaywrightChromium();
-  const browser = await chromium.launch({
-    headless: true,
-    timeout: CHECK_TIMEOUT_MS,
-  });
+  const browser = await launchChromium(chromium);
 
   try {
     return 'chromium launches';
@@ -801,17 +792,14 @@ async function runLibghosttyVtAvailableCheck(): Promise<DoctorCheckOutcome> {
   return probe.detail ?? 'libghostty-vt available';
 }
 
-async function runScreenshotViabilityCheck(): Promise<string> {
+export async function runScreenshotViabilityCheck(): Promise<string> {
   const chromium = await getPlaywrightChromium();
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'agent-tty-doctor-'));
   const screenshotPath = join(temporaryDirectory, 'smoke-check.png');
   let browser: BrowserLike | null = null;
 
   try {
-    browser = await chromium.launch({
-      headless: true,
-      timeout: CHECK_TIMEOUT_MS,
-    });
+    browser = await launchChromium(chromium);
     const page = await browser.newPage({
       viewport: {
         width: 320,

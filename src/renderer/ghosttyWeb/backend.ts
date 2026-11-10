@@ -9,7 +9,10 @@ import {
 import { copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-import { ensurePlaywrightBrowsersPath } from '../browserPath.js';
+import {
+  ensurePlaywrightBrowsersPath,
+  withChromiumInstallHint,
+} from '../browserPath.js';
 import {
   chromium,
   type Browser,
@@ -1385,9 +1388,11 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
         );
       }
 
-      const browser = await chromium.launch({
-        headless: true,
-      });
+      const browser = await withChromiumInstallHint(() =>
+        chromium.launch({
+          headless: true,
+        }),
+      );
       this.browser = browser;
       scope.add('browser', () => browser.close());
       browser.on('disconnected', () => {
