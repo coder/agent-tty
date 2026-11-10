@@ -148,7 +148,7 @@ const RENDERER_ENVIRONMENT_HINT =
   'Run `npx tsx src/cli/main.ts doctor --json` before retrying. If the renderer checks report a missing browser cache, run `npx playwright install chromium`.';
 const RENDERER_ENVIRONMENT_ERROR_PATTERNS = [
   /Playwright browser cache not found/iu,
-  /Run 'npx playwright install chromium' to install\./iu,
+  /Run 'npx playwright(?:@\S+)? install chromium' to install\./iu,
   /\bplaywright unavailable\b/iu,
   /\bplaywright not installed\b/iu,
   /\bplaywright import failed\b/iu,

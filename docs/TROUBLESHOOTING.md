@@ -12,11 +12,14 @@ The `doctor` command checks runtime, filesystem, PTY, socket, artifact, event-lo
 ## Chromium Or Browser Cache Missing
 
 Screenshots and WebM exports require Playwright/Chromium.
-Install Chromium once in the environment:
+Install Chromium once in the environment, with the commands in the [Chromium section of `INSTALL.md`](./INSTALL.md#chromium).
 
-```bash
-npx playwright install chromium
-```
+A `browser_launch` failure with `Executable doesn't exist` after a bare `npx playwright install chromium` can mean that the command installed the Chromium build of another Playwright version.
+Run the commands of that section instead.
+
+If the install command fails with `Playwright does not support chromium on <platform>`, that Playwright version has no Chromium build for your platform.
+When the platform is newer than that Playwright version, the build for an older release of the same operating system can work.
+In that case, set `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` for the install command, for example `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` on Ubuntu 26.04 with Playwright 1.60.0.
 
 If your environment uses a custom browser cache, expose it with `PLAYWRIGHT_BROWSERS_PATH` and rerun:
 
@@ -85,7 +88,7 @@ or install a GitHub Release tarball as described in [`INSTALL.md`](./INSTALL.md)
 Both routes skip the `prepare` build of agent-tty.
 On Linux, they still need the install script of `node-pty`, which builds its native module with node-gyp, because `node-pty` ships no prebuilt Linux binary.
 That build needs Python, make, and a C++ compiler.
-With npm 12, both routes need the extra flags in the [npm 12 section of `INSTALL.md`](./INSTALL.md#npm-12).
+With npm 12, both routes need the extra steps in the [npm 12 section of `INSTALL.md`](./INSTALL.md#npm-12).
 
 ## A Command Says `Failed to load native module: pty.node`
 

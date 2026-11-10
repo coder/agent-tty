@@ -11,11 +11,23 @@ agent-tty version --json
 agent-tty --home "$(mktemp -d)" doctor --json
 ```
 
-If `doctor --json` reports a missing Playwright browser cache on a fresh machine, run:
+If `doctor --json` reports a missing Playwright browser on a fresh machine, install [Chromium](#chromium).
+
+## Chromium
+
+Screenshots and WebM video need the Chromium build of the Playwright version that agent-tty uses.
+For a global install or a mise install of a published release, look that version up and install its Chromium:
 
 ```bash
-npx playwright install chromium
+AGENT_TTY_VERSION=$(agent-tty version --json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).result.cliVersion') &&
+  PLAYWRIGHT_VERSION=$(npm view "agent-tty@${AGENT_TTY_VERSION}" dependencies.playwright) &&
+  npx "playwright@${PLAYWRIGHT_VERSION}" install chromium
 ```
+
+A Playwright version looks only for the Chromium build that it was released with.
+Outside a project, a bare `npx playwright install chromium` runs the newest Playwright, and its build can differ from the one that agent-tty looks for.
+In a project-local install, `npx playwright install chromium` runs the Playwright of the project, which is the right one unless the project also depends on another Playwright version.
+For that case and for a git install, whose snapshot can use a newer Playwright than the published release, take the version that `npm ls playwright` lists under `agent-tty` (add `-g` for a global install).
 
 ## npm
 
