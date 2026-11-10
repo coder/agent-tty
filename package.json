@@ -68,7 +68,7 @@
     "@types/node": "25.5.0",
     "@types/react": "^19.2.16",
     "oxfmt": "0.47.0",
-    "oxlint": "1.62.0",
+    "oxlint": "1.66.0",
     "oxlint-tsgolint": "0.22.1",
     "release-please": "17.9.0",
     "tsx": "4.21.0",
