@@ -19,6 +19,8 @@ npx playwright install chromium
 
 ## npm
 
+With npm 12, read [npm 12](#npm-12) first.
+
 ### Global install
 
 ```bash
@@ -55,6 +57,43 @@ PACKAGE_VERSION=<version>
 npm install "agent-tty@${PACKAGE_VERSION}"
 ./node_modules/.bin/agent-tty version --json
 ```
+
+### npm 12
+
+npm 12 does not run the install scripts of dependencies by default.
+On Linux, `node-pty` builds its native module in an install script, so approve that script.
+Without the approval, every `agent-tty` command fails with `Failed to load native module: pty.node`.
+
+For a global install, add `--allow-scripts=node-pty`:
+
+```bash
+npm install -g --allow-scripts=node-pty agent-tty
+```
+
+npm 12 rejects that flag in a project-local install.
+There, approve the script in the `package.json` of the project, then rebuild `node-pty`:
+
+```bash
+npm install agent-tty
+npm approve-scripts node-pty
+npm rebuild node-pty
+```
+
+A tarball file takes the same approval as the registry package.
+npm 12 also refuses the release tarball URL and git sources by default.
+For the [direct release asset install](#direct-release-asset-install), add `--allow-remote=root`:
+
+```bash
+npm install -g --allow-remote=root --allow-scripts=node-pty "$TARBALL_URL"
+```
+
+For the [git source install](#git-source-install), add `--allow-git=root`:
+
+```bash
+npm install -g --allow-git=root --allow-scripts=node-pty github:coder/agent-tty
+```
+
+To repair an install that already fails with that error, run the commands for its install type.
 
 ## mise
 

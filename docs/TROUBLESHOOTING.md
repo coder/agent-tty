@@ -85,6 +85,7 @@ or install a GitHub Release tarball as described in [`INSTALL.md`](./INSTALL.md)
 Both routes skip the `prepare` build of agent-tty.
 On Linux, they still need the install script of `node-pty`, which builds its native module with node-gyp, because `node-pty` ships no prebuilt Linux binary.
 That build needs Python, make, and a C++ compiler.
+With npm 12, both routes need the extra flags in the [npm 12 section of `INSTALL.md`](./INSTALL.md#npm-12).
 
 ## A Command Says `Failed to load native module: pty.node`
 
@@ -92,11 +93,7 @@ On Linux, every `agent-tty` command fails with this error when the install did n
 mise skips that script by default.
 The [mise section of `INSTALL.md`](./INSTALL.md#mise) has the command that approves the build and the repair for an existing install.
 npm 12 blocks that script by default too.
-With npm 12, reinstall the global package with the build approved:
-
-```bash
-npm install -g --allow-scripts=node-pty agent-tty
-```
+The [npm 12 section of `INSTALL.md`](./INSTALL.md#npm-12) has the commands for a global install, a project-local install, a release tarball, and a git install, and the repair for an existing install.
 
 ## Platform Notes
 
