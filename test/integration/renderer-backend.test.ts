@@ -1142,7 +1142,7 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       expect(settled).toEqual([true, false]);
     });
 
-    it('replays empty chunks in a timed replay, as the last chunk, the only chunk and a middle chunk of a flush', async () => {
+    it('replays empty output events in a timed replay as the log without them', async () => {
       await backend.boot();
       const resize = (seq: number, cols: number): ReplayInput['events'][0] => ({
         seq,
@@ -1157,8 +1157,9 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         payload: { data },
       });
 
-      // A resize ends the flush before it: [ab, ''], then [''], then the
-      // final flush [c, '', d].
+      // The timed replay leaves the empty events out of its flushes: [ab],
+      // then after the resizes [c, d]. The screen shows abcd, and the replay
+      // still applies the last event.
       const state = await backend.replayWithTiming(
         createReplayInput([
           output(0, 'ab'),
