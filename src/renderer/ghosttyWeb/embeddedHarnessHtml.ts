@@ -71,7 +71,7 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
       <div id="terminal"></div>
     </div>
     <script type="module">
-      import { Terminal, init } from '/assets/ghostty-web.js';
+      import { CellFlags, Terminal, init } from '/assets/ghostty-web.js';
 
       const DEFAULT_COLS = 80;
       const DEFAULT_ROWS = 24;
@@ -386,31 +386,60 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
       }
 
       // Width for a single column, used to drop wide-glyph trailing spacers.
-      // getCell() always returns a cell (out-of-range columns synthesize a
-      // blank width-1 cell), so a missing cell is treated as a blank column.
+      function normalizeCellWidth(width) {
+        return Number.isInteger(width) && width >= 0 ? width : 1;
+      }
+
+      // The width of a column of a scrollback line. getCell() always returns a
+      // cell (out-of-range columns synthesize a blank width-1 cell), so a
+      // missing cell is treated as a blank column.
       function readCellWidth(line, col) {
         const cell = line?.getCell(col);
         if (cell === undefined || cell === null) {
           return 1;
         }
-        const width = cell.getWidth();
-        return Number.isInteger(width) && width >= 0 ? width : 1;
+        return normalizeCellWidth(cell.getWidth());
+      }
+
+      // The cells of the visible screen, row by row: the cell of (row, col) is
+      // cells[row * cols + col]. A decode reads them here, once.
+      // activeBuffer.getLine(row) re-reads the whole viewport out of the wasm
+      // module on every call and copies one row of it, so a loop over the rows
+      // read each cell once per row. The pool that getViewport() returns never
+      // shrinks, so it can hold more cells than the screen: the width of the
+      // screen sets the row stride, not the length of the pool. No update() is
+      // needed first: a read in the task of a write or a resize sees the new
+      // screen.
+      function readViewportCells(wasmTerm, cols, rows) {
+        const cells = wasmTerm.getViewport();
+        invariant(
+          cells.length >= rows * cols,
+          'viewport cell count must cover the visible grid',
+        );
+        return cells;
+      }
+
+      // Whether a cell holds a character: the rule of getChars() in
+      // ghostty-web 0.4.0, which gives '' only for codepoint 0 (a blank or a
+      // wide glyph's trailing spacer). It maps any other value to a character,
+      // U+FFFD for a value that is not a Unicode scalar value.
+      function cellHasChars(cell) {
+        return cell.codepoint !== 0;
       }
 
       function decodeVisibleLines(terminal) {
         terminal.scrollToBottom();
-        const { cols, rows, activeBuffer, viewportY } =
-          getNormalizedViewportState(terminal);
+        const { cols, rows } = getNormalizedViewportState(terminal);
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
 
+        const viewport = readViewportCells(wasmTerm, cols, rows);
         const visibleLines = [];
         for (let row = 0; row < rows; row += 1) {
-          const line = activeBuffer.getLine(viewportY + row);
           const text = decodeGraphemeLine(
             (col) => ({
               grapheme: wasmTerm.getGraphemeString(row, col),
-              width: readCellWidth(line, col),
+              width: normalizeCellWidth(viewport[row * cols + col].width),
             }),
             cols,
           );
@@ -465,10 +494,13 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return \`#\${colorValue.toString(16).padStart(6, '0')}\`;
       }
 
+      function packRgb(red, green, blue) {
+        return (red << 16) | (green << 8) | blue;
+      }
+
+      // cell is a cell of readViewportCells().
       function decodeSnapshotCell(cell, graphemeChar) {
         invariant(cell !== undefined, 'snapshot cell must be defined');
-        const baseChars = cell.getChars();
-        assertStringValue(baseChars, 'snapshot cell char must be a string');
         assertStringValue(
           graphemeChar,
           'snapshot cell grapheme must be a string',
@@ -484,30 +516,31 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         // cluster so continuation codepoints (emoji ZWJ, NFD combining marks)
         // are not dropped. The Screen Hash sources visibleLines[].text, never
         // cells[], so this asymmetry never reaches the hash.
-        const char = baseChars === '' ? '' : graphemeChar;
+        const char = cellHasChars(cell) ? graphemeChar : '';
 
-        const isInverse = cell.isInverse() === 1;
-        const fgColor = cell.getFgColor();
-        const bgColor = cell.getBgColor();
+        const isInverse = (cell.flags & CellFlags.INVERSE) !== 0;
+        const fgColor = packRgb(cell.fg_r, cell.fg_g, cell.fg_b);
+        const bgColor = packRgb(cell.bg_r, cell.bg_g, cell.bg_b);
 
         return {
           char,
           fg: toHexColor(isInverse ? bgColor : fgColor),
           bg: toHexColor(isInverse ? fgColor : bgColor),
-          ...(cell.isBold() === 1 && { bold: true }),
-          ...(cell.isItalic() === 1 && { italic: true }),
-          ...(cell.isUnderline() === 1 && { underline: true }),
-          ...(cell.isStrikethrough() === 1 && { strikethrough: true }),
+          ...((cell.flags & CellFlags.BOLD) !== 0 && { bold: true }),
+          ...((cell.flags & CellFlags.ITALIC) !== 0 && { italic: true }),
+          ...((cell.flags & CellFlags.UNDERLINE) !== 0 && { underline: true }),
+          ...((cell.flags & CellFlags.STRIKETHROUGH) !== 0 && {
+            strikethrough: true,
+          }),
         };
       }
 
       function decodeVisibleCells(terminal, visibleLines) {
         terminal.scrollToBottom();
-        const { cols, rows, activeBuffer, viewportY } =
-          getNormalizedViewportState(terminal);
+        const { cols, rows } = getNormalizedViewportState(terminal);
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
-        const nullCell = activeBuffer.getNullCell();
+        const viewport = readViewportCells(wasmTerm, cols, rows);
         const cells = [];
 
         invariant(
@@ -522,12 +555,11 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
             \`visible line \${row} row must be a non-negative integer\`,
           );
 
-          const line = activeBuffer.getLine(viewportY + row);
           const rowCells = [];
           for (let col = 0; col < cols; col += 1) {
             rowCells.push(
               decodeSnapshotCell(
-                line?.getCell(col) ?? nullCell,
+                viewport[row * cols + col],
                 wasmTerm.getGraphemeString(row, col),
               ),
             );
@@ -547,24 +579,24 @@ export const EMBEDDED_HARNESS_HTML = `<!doctype html>
         return cells;
       }
 
-      // One grapheme string per viewport cell, '' where getChars() is empty
-      // (blanks and wide-glyph spacers), the same rule as decodeSnapshotCell.
+      // One grapheme string per viewport cell, '' where the cell has no
+      // character (blanks and wide-glyph spacers), the same rule as
+      // decodeSnapshotCell.
       function getCellGraphemes() {
         const terminal = getReadyTerminal();
         terminal.scrollToBottom();
-        const { cols, rows, activeBuffer, viewportY } =
-          getNormalizedViewportState(terminal);
+        const { cols, rows } = getNormalizedViewportState(terminal);
         const wasmTerm = terminal.wasmTerm;
         invariant(wasmTerm, 'terminal WASM instance is unavailable');
-        const nullCell = activeBuffer.getNullCell();
+        const cells = readViewportCells(wasmTerm, cols, rows);
         const grid = [];
         for (let row = 0; row < rows; row += 1) {
-          const line = activeBuffer.getLine(viewportY + row);
           const graphemes = [];
           for (let col = 0; col < cols; col += 1) {
-            const cell = line?.getCell(col) ?? nullCell;
             graphemes.push(
-              cell.getChars() === '' ? '' : wasmTerm.getGraphemeString(row, col),
+              cellHasChars(cells[row * cols + col])
+                ? wasmTerm.getGraphemeString(row, col)
+                : '',
             );
           }
           grid.push(graphemes);

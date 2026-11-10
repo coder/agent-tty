@@ -14,6 +14,7 @@ import type {
 } from '../../src/renderer/types.js';
 import { GhosttyWebBackend } from '../../src/renderer/ghosttyWeb/index.js';
 import { probeUsedFonts } from '../../src/renderer/ghosttyWeb/missingGlyphs.js';
+import { PER_ROW_DECODE } from '../helpers/perRowDecode.js';
 
 const PROFILE = resolveProfile('reference-dark');
 const SESSION_ID = 'renderer-backend-integration';
@@ -45,6 +46,22 @@ function createReplayInput(
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
+
+// The harness decode starts with terminal.scrollToBottom(). Patching it keeps
+// the terminal in globalThis.__decodedTerminal for PER_ROW_DECODE. The string
+// keeps vitest from rewriting the import.
+async function keepDecodedTerminal(page: Page): Promise<void> {
+  await page.evaluate(`(() => {
+    return import('/assets/ghostty-web.js').then(({ Terminal }) => {
+      const scrollToBottom = Terminal.prototype.scrollToBottom;
+      Terminal.prototype.scrollToBottom = function () {
+        globalThis.__decodedTerminal = this;
+        return scrollToBottom.call(this);
+      };
+      window.__agentTty.getVisibleText();
+    });
+  })()`);
+}
 
 function visibleTextFromSnapshot(
   snapshot: Awaited<ReturnType<GhosttyWebBackend['snapshot']>>,
@@ -1407,6 +1424,381 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     expect(await painted()).toEqual({
       seen: ['a', 'b', 'c', 'd', 'e'],
       complete: false,
+    });
+  });
+
+  // The scan of a flush reads the viewport once. The per-row decode reads it
+  // row by row. Both must name the same grapheme in every cell, whatever the
+  // screen holds and however it came to hold it.
+  it('notes the graphemes of every cell as the per-row read names them', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await keepDecodedTerminal(page);
+    const noted = new Set<string>();
+    const sizes: string[] = [];
+    // Flushes the chunks, notes their graphemes, and returns the notes so far.
+    const flush = async (chunks: string[]): Promise<string[]> =>
+      page.evaluate(
+        `(async () => {
+          await window.__agentTty.writeBatch(${JSON.stringify(chunks)}, true, 1000);
+          return [...window.__agentTtyPainted.seen];
+        })()`,
+      ) as Promise<string[]>;
+    // The scan reads first, then the per-row decode reads the same screen. A
+    // script runs before the scan, in the same task.
+    const readGrids = (
+      script = '',
+    ): Promise<{ grid: string[][]; cells: string[][] }> =>
+      page.evaluate(
+        `(() => {
+          ${script}
+          const grid = window.__agentTty.getCellGraphemes();
+          const reference = (${PER_ROW_DECODE})(globalThis.__decodedTerminal, false);
+          return {
+            grid,
+            cells: reference.cells.map((line) => line.cells.map((cell) => cell.char)),
+          };
+        })()`,
+      ) as Promise<{ grid: string[][]; cells: string[][] }>;
+    const check = async (chunks: string[]): Promise<string[][]> => {
+      const painted = await flush(chunks);
+      const { grid, cells } = await readGrids();
+      expect(grid).toEqual(cells);
+      sizes.push(`${String(grid[0]?.length)}x${String(grid.length)}`);
+      for (const grapheme of grid.flat()) {
+        if (grapheme !== '') {
+          noted.add(grapheme);
+        }
+      }
+      expect(new Set(painted)).toEqual(noted);
+      return grid;
+    };
+    // The scan runs in the task of the resize, before any frame updates the
+    // render state, as the note after a resize event of a replay does.
+    const resizeAndRead = async (cols: number, rows: number): Promise<void> => {
+      const { grid, cells } = await readGrids(
+        `window.__agentTty.resize(${String(cols)}, ${String(rows)});`,
+      );
+      expect(grid).toHaveLength(rows);
+      expect(grid.every((row) => row.length === cols)).toBe(true);
+      expect(grid).toEqual(cells);
+    };
+
+    await resizeAndRead(80, 24);
+    // Narrow, wide, combining, joined and unassigned glyphs on one screen.
+    const mixed = await check([
+      '\u001b[2J\u001b[Habc \u65e5\u672c\u8a9e e\u0301 \u{1F469}\u200D\u{1F4BB} \u{1F1EF}\u{1F1F5}',
+      '\r\n\u0915\u094D\u0937\u093F \u0378 \ue0b0 a\u0300\u0301 \u{1F44D}\u{1F3FD}',
+    ]);
+    expect(mixed[0]?.slice(0, 5)).toEqual(['a', 'b', 'c', ' ', '\u65e5']);
+    // A wide glyph's trailing spacer cell has no grapheme.
+    expect(mixed[0]?.[5]).toBe('');
+    expect(noted).toContain('e\u0301');
+    expect(noted).toContain('\u{1F469}\u200D\u{1F4BB}');
+    expect(noted).toContain('\u0915\u094D');
+    expect(noted).toContain('\u0937\u093F');
+    expect(noted).toContain('\u0378');
+
+    // Every row changes by scrolling, and no flush writes into a row.
+    const scrolled = await check([
+      Array.from({ length: 40 }, (_, line) => `line ${String(line)}`).join(
+        '\r\n',
+      ),
+    ]);
+    expect(scrolled[0]?.join('').trimEnd()).not.toBe(
+      mixed[0]?.join('').trimEnd(),
+    );
+
+    // The other screen has its own cells and returns the first screen's.
+    await check(['\u001b[?1049h\u001b[2J\u001b[Halt \u{1F600} \u00c5']);
+    await check(['\u001b[?1049l']);
+
+    // A write changes the wasm screen at once, and the render state follows
+    // a frame later. A scan in the task of the write must not read the old
+    // state.
+    const fresh = await readGrids(
+      `void window.__agentTty.write('\\u001b[2J\\u001b[Hsync');`,
+    );
+    expect(fresh.grid[0]?.slice(0, 4)).toEqual(['s', 'y', 'n', 'c']);
+    expect(fresh.grid).toEqual(fresh.cells);
+
+    // The cell pool of ghostty-web grows with the screen and does not shrink.
+    // After a shrink its cells past the screen still hold the larger screen,
+    // so the scan must index the viewport by the width of the screen.
+    await resizeAndRead(120, 40);
+    await check(['x'.repeat(120 * 40)]);
+    await resizeAndRead(40, 10);
+    await check(['\u001b[2J\u001b[Hsmall \u65e5\u672c \u{1F600}']);
+    await resizeAndRead(100, 30);
+    await check(['\u001b[2J\u001b[Hagain \u{1F1EF}\u{1F1F5}']);
+    expect(sizes).toEqual([
+      '80x24',
+      '80x24',
+      '80x24',
+      '80x24',
+      '120x40',
+      '40x10',
+      '100x30',
+    ]);
+  });
+
+  // A snapshot and a wait poll read the viewport once. PER_ROW_DECODE reads it
+  // row by row, as the harness did before. Both must give the same lines,
+  // cells and text for every screen. The harness decodes first in every
+  // comparison, so a read in the task of a write or a resize cannot lean on an
+  // update that the per-row read made. The page compares the two decodes and
+  // returns the differences: sending the cells of a large screen to the test
+  // costs far more than decoding them.
+  it('decodes the visible lines and cells as the per-row read of the same screen does', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await keepDecodedTerminal(page);
+    interface Cell {
+      char: string;
+      fg: string;
+      bg: string;
+      bold?: boolean;
+      italic?: boolean;
+      underline?: boolean;
+      strikethrough?: boolean;
+    }
+    interface Comparison {
+      cols: number;
+      rows: number;
+      scrollbackLength: number;
+      differences: string[];
+      cells: Cell[][];
+    }
+    const flush = async (chunks: string[]): Promise<void> => {
+      await page.evaluate(
+        `window.__agentTty.writeBatch(${JSON.stringify(chunks)}, true)`,
+      );
+    };
+    // A script runs before the decodes, in the same task. The result holds the
+    // cells of the top rows of the screen, for the checks of its content.
+    const compare = async (script = '', topRows = 0): Promise<Comparison> => {
+      const comparison = (await page.evaluate(
+        `(() => {
+          ${script}
+          const text = window.__agentTty.getVisibleText();
+          const actual = window.__agentTty.getSnapshot({
+            includeScrollback: true,
+            includeCells: true,
+          });
+          const expected = (${PER_ROW_DECODE})(globalThis.__decodedTerminal, true);
+          const canon = (value) =>
+            JSON.stringify(value, (key, item) =>
+              item !== null && typeof item === 'object' && !Array.isArray(item)
+                ? Object.fromEntries(
+                    Object.entries(item).sort(([a], [b]) => (a < b ? -1 : 1)),
+                  )
+                : item,
+            );
+          const firstDifference = (name, left, right) => {
+            if (left.length !== right.length) {
+              return name + ': ' + left.length + ' rows against ' + right.length;
+            }
+            for (let row = 0; row < left.length; row += 1) {
+              if (canon(left[row]) !== canon(right[row])) {
+                return name + ' ' + row + ': ' + canon(left[row]).slice(0, 400) +
+                  ' against ' + canon(right[row]).slice(0, 400);
+              }
+            }
+            return null;
+          };
+          const differences = [
+            actual.cols === expected.cols && actual.rows === expected.rows
+              ? null
+              : 'size',
+            firstDifference('visibleLines', actual.visibleLines, expected.visibleLines),
+            firstDifference('scrollbackLines', actual.scrollbackLines, expected.scrollbackLines),
+            firstDifference('cells', actual.cells, expected.cells),
+            text === expected.visibleLines.map((line) => line.text).join('\\n')
+              ? null
+              : 'text',
+          ].filter((difference) => difference !== null);
+          return {
+            cols: actual.cols,
+            rows: actual.rows,
+            scrollbackLength: actual.scrollbackLines.length,
+            differences,
+            cells: actual.cells.slice(0, ${String(topRows)}).map((line) => line.cells),
+          };
+        })()`,
+      )) as Comparison;
+      expect(comparison.differences).toEqual([]);
+      return comparison;
+    };
+    const cellAt = (grid: Cell[][], row: number, col: number): Cell => {
+      const cell = grid[row]?.[col];
+      if (cell === undefined) {
+        throw new Error(
+          `the screen has no cell at row ${String(row)} col ${String(col)}`,
+        );
+      }
+      return cell;
+    };
+    const find = (
+      grid: Cell[][],
+      char: string,
+    ): { row: number; col: number } => {
+      for (const [row, line] of grid.entries()) {
+        const col = line.findIndex((cell) => cell.char === char);
+        if (col >= 0) {
+          return { row, col };
+        }
+      }
+      throw new Error(`the screen has no cell with ${JSON.stringify(char)}`);
+    };
+
+    // A blank screen, in the task of a resize that changes nothing.
+    const blank = await compare('window.__agentTty.resize(80, 24);', 1);
+    const blankCell = cellAt(blank.cells, 0, 79);
+    expect(blankCell.char).toBe('');
+
+    // Every style, narrow and wide glyphs, combining marks, joined emoji,
+    // flags, Indic clusters, unassigned and private-use code points, half of a
+    // wide glyph overwritten, and a wide glyph at the last column.
+    await flush([
+      '\u001b[2J\u001b[H',
+      '\u001b[1mbold\u001b[22m \u001b[3mitalic\u001b[23m \u001b[4munder\u001b[24m \u001b[9mstrike\u001b[29m \u001b[2mfaint\u001b[22m\r\n',
+      '\u001b[7minverse\u001b[27m \u001b[7;38;2;10;200;30;48;5;196mxcolour\u001b[0m \u001b[38;5;33;48;2;250;240;5mycolour\u001b[0m\r\n',
+      '\u001b[1;3;4;9;31;44mall\u001b[0m \u65e5\u672c\u8a9e \u001b[1m\u6f22\u5b57\u001b[0m \u{1F469}\u200D\u{1F4BB} \u001b[43me\u0301\u001b[0m\r\n',
+      '\u0915\u094D\u0937\u093F \u0378 \ue0b0 \u{1F1EF}\u{1F1F5} \u{1F44D}\u{1F3FD} \uff21\uff22\r\n',
+      '\u{1F600}\u001b[1Dz  \u001b[5;80H\u65e5\u65e5',
+      '\u001b[7;1H\ttab\t\u001b[5mblink\u001b[25m \u001b[8mhidden\u001b[28m',
+    ]);
+    const mixed = (await compare('', 8)).cells;
+    expect(cellAt(mixed, 0, 0)).toMatchObject({ char: 'b', bold: true });
+    expect(cellAt(mixed, 0, 5)).toMatchObject({ char: 'i', italic: true });
+    expect(cellAt(mixed, 0, 12)).toMatchObject({ char: 'u', underline: true });
+    expect(cellAt(mixed, 0, 18)).toMatchObject({
+      char: 's',
+      strikethrough: true,
+    });
+    // Inverse swaps the two colours.
+    expect(cellAt(mixed, 1, 0)).toMatchObject({
+      char: 'i',
+      fg: blankCell.bg,
+      bg: blankCell.fg,
+    });
+    expect(cellAt(mixed, 1, 8)).toMatchObject({ char: 'x', bg: '#0ac81e' });
+    const wide = find(mixed, '\u65e5');
+    expect(cellAt(mixed, wide.row, wide.col + 1).char).toBe('');
+    expect(find(mixed, '\u{1F469}\u200D\u{1F4BB}').row).toBe(wide.row);
+    expect(find(mixed, 'e\u0301').row).toBe(wide.row);
+    expect(find(mixed, '\u0915\u094D').row).toBe(wide.row + 1);
+
+    // Sixty lines scroll the first screen into the scrollback.
+    await flush([
+      Array.from(
+        { length: 60 },
+        (_, line) =>
+          `line ${String(line)} \u001b[3${String(line % 8)}m\u65e5\u672c\u001b[0m e\u0301 \u001b[1mbold\u001b[0m`,
+      ).join('\r\n'),
+    ]);
+    expect((await compare()).scrollbackLength).toBeGreaterThan(30);
+
+    // The other screen has its own cells and returns the first screen's.
+    await flush([
+      '\u001b[?1049h\u001b[2J\u001b[Halt \u001b[7mscreen\u001b[0m \u{1F600} \u65e5',
+    ]);
+    expect(cellAt((await compare('', 1)).cells, 0, 0).char).toBe('a');
+    await flush(['\u001b[?1049l']);
+    await compare();
+
+    // A write changes the wasm screen at once, and the render state follows a
+    // frame later. A decode in the task of the write must not read the old
+    // screen. The old screen has narrow cells where the new row has the
+    // spacers of two wide glyphs, so an old width shows as extra spaces.
+    const fresh = await compare(
+      `void window.__agentTty.write('\\u001b[2J\\u001b[H\\u65e5\\u672cabc \\u001b[1;31msync\\u001b[0m');`,
+      1,
+    );
+    expect(cellAt(fresh.cells, 0, 0).char).toBe('\u65e5');
+    expect(cellAt(fresh.cells, 0, 1).char).toBe('');
+    expect(cellAt(fresh.cells, 0, 8)).toMatchObject({ char: 's', bold: true });
+
+    // The cell pool of ghostty-web grows with the screen and does not shrink.
+    // After a shrink its cells past the screen still hold the larger screen,
+    // so the decode must index the viewport by the width of the screen.
+    const sizes: string[] = [];
+    for (const [cols, rows, text] of [
+      [120, 40, '\u001b[1mx\u001b[0m'],
+      [40, 10, '\u65e5y'],
+      [100, 30, '\u001b[7mz\u001b[0m\u{1F600}'],
+      [200, 60, 'w'],
+      [80, 24, '\u0301e'],
+    ] as const) {
+      const resized = await compare(
+        `window.__agentTty.resize(${String(cols)}, ${String(rows)});`,
+      );
+      expect([resized.cols, resized.rows]).toEqual([cols, rows]);
+      await flush([`\u001b[2J\u001b[H${text.repeat(cols * rows)}`]);
+      const full = await compare();
+      sizes.push(`${String(full.cols)}x${String(full.rows)}`);
+    }
+    expect(sizes).toEqual(['120x40', '40x10', '100x30', '200x60', '80x24']);
+  });
+
+  // ghostty-web's getChars() gives '' for codepoint 0 and a character for every
+  // other value, U+FFFD for one that is no Unicode scalar value. A snapshot and
+  // the scan must follow that rule, also for values that the terminal does not
+  // write. The page plants the value in the first cell of the viewport read.
+  it('says a cell with any codepoint but 0 has a character, as the per-row read does', async () => {
+    await backend.boot();
+    const { page } = backend as unknown as { page: Page };
+    await keepDecodedTerminal(page);
+    await page.evaluate(
+      `window.__agentTty.writeBatch(["\\u001b[2J\\u001b[Hhello"], true)`,
+    );
+
+    const answers: Record<
+      string,
+      { cell: string; scan: string; reference: string }
+    > = {};
+    for (const codepoint of [
+      0, 0x41, 0xd7ff, 0xd800, 0xdfff, 0xe000, 0x10ffff, 0x110000, 0x1fffff,
+    ]) {
+      answers[codepoint.toString(16)] = (await page.evaluate(
+        `(() => {
+          const wasmTerm = globalThis.__decodedTerminal.wasmTerm;
+          const getViewport = wasmTerm.getViewport.bind(wasmTerm);
+          wasmTerm.getViewport = () => {
+            const cells = getViewport();
+            cells[0].codepoint = ${String(codepoint)};
+            return cells;
+          };
+          try {
+            const snapshot = window.__agentTty.getSnapshot({ includeCells: true });
+            const scan = window.__agentTty.getCellGraphemes();
+            const reference = (${PER_ROW_DECODE})(globalThis.__decodedTerminal, false);
+            return {
+              cell: snapshot.cells[0].cells[0].char,
+              scan: scan[0][0],
+              reference: reference.cells[0].cells[0].char,
+            };
+          } finally {
+            delete wasmTerm.getViewport;
+          }
+        })()`,
+      )) as { cell: string; scan: string; reference: string };
+    }
+
+    // The grapheme of the first cell is 'h', whatever codepoint the planted
+    // cell holds, so the answer is 'h' when the cell has a character.
+    const hasCharacter = { cell: 'h', scan: 'h', reference: 'h' };
+    const blank = { cell: '', scan: '', reference: '' };
+    expect(answers).toEqual({
+      '0': blank,
+      '41': hasCharacter,
+      d7ff: hasCharacter,
+      d800: hasCharacter,
+      dfff: hasCharacter,
+      e000: hasCharacter,
+      '10ffff': hasCharacter,
+      '110000': hasCharacter,
+      '1fffff': hasCharacter,
     });
   });
 
