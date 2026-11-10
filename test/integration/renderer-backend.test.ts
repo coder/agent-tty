@@ -1047,6 +1047,12 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         `${'x'.repeat(80)}\n`.repeat(12) + 'x'.repeat(40),
         40,
       ],
+      [
+        'inside the first call of a flush of 1001 chunks',
+        [...thousandXs.slice(0, 500), '', ...thousandXs.slice(500)],
+        `${'x'.repeat(80)}\n`.repeat(12) + 'x'.repeat(40),
+        40,
+      ],
     ])(
       'replays an empty chunk %s',
       async (_name, chunks, expectedText, expectedCursorCol) => {
@@ -1076,6 +1082,64 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
           `window.__agentTty.getVisibleText().split('\\n')[0]`,
         ),
       ).toBe('ok');
+    });
+
+    // The call that ends a flush adds the graphemes on the screen to the set
+    // that the missing-glyph check probes, whether or not the flush wrote.
+    it('notes the painted graphemes in the call that ends a flush of only empty chunks', async () => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      await page.evaluate('window.__agentTty.resize(80, 24)');
+      const painted = (): Promise<{
+        seen: string[];
+        complete: boolean;
+      } | null> =>
+        page.evaluate(
+          `(() => {
+            const state = window.__agentTtyPainted;
+            return state === undefined ? null : { seen: [...state.seen], complete: state.complete };
+          })()`,
+        ) as Promise<{ seen: string[]; complete: boolean } | null>;
+
+      await page.evaluate(`window.__agentTty.writeBatch(['abc'], true, null)`);
+      expect(await painted()).toBeNull();
+
+      await page.evaluate(`window.__agentTty.writeBatch(['', ''], true, 5)`);
+      expect(await painted()).toEqual({
+        seen: ['a', 'b', 'c'],
+        complete: true,
+      });
+    });
+
+    // ghostty-web calls a write callback one animation frame after the write.
+    // With no frame coming, a flush that wrote something stays pending, and a
+    // flush of only empty chunks has nothing to wait for.
+    it('ends a flush of only empty chunks without waiting for a frame', async () => {
+      await backend.boot();
+      const { page } = backend as unknown as { page: Page };
+      await page.evaluate('window.__agentTty.resize(80, 24)');
+
+      const settled = await page.evaluate(
+        `(async () => {
+          const requestFrame = window.requestAnimationFrame;
+          window.requestAnimationFrame = () => 0;
+          try {
+            const settles = (promise) =>
+              Promise.race([
+                promise.then(() => true),
+                new Promise((resolve) => setTimeout(() => resolve(false), 500)),
+              ]);
+            return [
+              await settles(window.__agentTty.writeBatch(['', ''], true)),
+              await settles(window.__agentTty.writeBatch(['x'], true)),
+            ];
+          } finally {
+            window.requestAnimationFrame = requestFrame;
+          }
+        })()`,
+      );
+
+      expect(settled).toEqual([true, false]);
     });
 
     it('replays empty chunks in a timed replay, as the last chunk, the only chunk and a middle chunk of a flush', async () => {
@@ -1114,8 +1178,10 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
     });
 
     it('shows the same text and the same screenshot as the log without the empty chunks', async () => {
-      // A log of 300 chunks: text, colours, line breaks, cursor moves and
-      // erases. The twin has an empty chunk after about every third chunk.
+      // A log of 300 chunks on a screen of 40 columns and 10 rows: text,
+      // colours, line breaks, cursor moves and erases. It scrolls, so the
+      // scrollback and the visible rows both hold text. The twin has an empty
+      // chunk after about every third chunk.
       let seed = 20_261_109;
       const random = (limit: number): number => {
         seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
@@ -1125,12 +1191,13 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
         'abc ',
         'The quick brown fox ',
         '\r\n',
+        '\r\n',
+        '\r\n',
         '\u001b[31mred\u001b[0m ',
         '\u001b[1;44mbold\u001b[0m ',
-        '\u001b[3A',
+        '\u001b[1A',
         '\u001b[10C',
         '\u001b[K',
-        '\u001b[2;5H',
         '\u00e9\u4e2d ',
       ];
       const chunks = Array.from(
@@ -1148,16 +1215,21 @@ describe('GhosttyWebBackend integration', { timeout: 120_000 }, () => {
       try {
         await backend.boot();
         await twin.boot();
-        await backend.replayTo(createReplayInput(outputEvents(chunks)));
+        const size = { initialCols: 40, initialRows: 10 };
+        await backend.replayTo(createReplayInput(outputEvents(chunks), size));
         await twin.replayTo(
           createReplayInput(outputEvents(chunksWithEmpties), {
+            ...size,
             sessionId: `${SESSION_ID}-twin`,
           }),
         );
 
         const plain = await backend.snapshot({ includeScrollback: true });
         const withEmpties = await twin.snapshot({ includeScrollback: true });
-        expect(screenText(plain)).not.toBe('');
+        expect(plain.scrollbackLines?.length).toBeGreaterThan(20);
+        expect(
+          plain.visibleLines.filter((line) => line.text.trim() !== '').length,
+        ).toBeGreaterThan(6);
         expect(withEmpties.visibleLines).toEqual(plain.visibleLines);
         expect(withEmpties.scrollbackLines).toEqual(plain.scrollbackLines);
         expect(withEmpties.cursorRow).toBe(plain.cursorRow);

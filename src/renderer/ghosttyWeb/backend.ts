@@ -181,9 +181,19 @@ let servedAssetsPromise: Promise<
 > | null = null;
 
 /**
+ * An output event with empty data changes no pixel. A timed replay takes it
+ * out of the recording: the event has no place on the schedule and no effect
+ * on where a flush splits, so the replay is the one of the log without it.
+ */
+function isEmptyOutput(event: ReplayInput['events'][number]): boolean {
+  return event.type === 'output' && event.payload.data.length === 0;
+}
+
+/**
  * Recorded time between the first and the last event that a replay applies:
- * the seqs above `afterSeq`, up to the target. It is 0 when a timestamp does
- * not parse. The replay loop rejects such a timestamp itself.
+ * the seqs above `afterSeq`, up to the target, without an empty output event.
+ * It is 0 when a timestamp does not parse. The replay loop rejects such a
+ * timestamp itself.
  */
 function recordedSpanMs(input: ReplayInput, afterSeq: number): number {
   let firstMs: number | undefined;
@@ -194,6 +204,9 @@ function recordedSpanMs(input: ReplayInput, afterSeq: number): number {
     }
     if (event.seq > input.targetSeq) {
       break;
+    }
+    if (isEmptyOutput(event)) {
+      continue;
     }
     lastMs = Date.parse(event.ts);
     firstMs ??= lastMs;
@@ -842,6 +855,13 @@ export class GhosttyWebBackend implements VideoCapableRendererBackend {
       if (event.seq > input.targetSeq) {
         await flushOutputBatch();
         break;
+      }
+
+      // The replay still counts the event as applied, so `lastSeq` and the
+      // progress reports reach its seq.
+      if (isEmptyOutput(event)) {
+        highestProcessedSeq = event.seq;
+        continue;
       }
 
       const eventTimestampMs = parseEventTimestampMs(event.ts, event.seq);
