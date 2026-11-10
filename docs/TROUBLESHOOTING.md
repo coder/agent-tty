@@ -14,11 +14,12 @@ The `doctor` command checks runtime, filesystem, PTY, socket, artifact, event-lo
 Screenshots and WebM exports require Playwright/Chromium.
 Install Chromium once in the environment, with the commands in the [Chromium section of `INSTALL.md`](./INSTALL.md#chromium).
 
-If `doctor --json` still fails `browser_launch` with `Executable doesn't exist` after a bare `npx playwright install chromium`, that command installed the Chromium build of another Playwright version.
+A `browser_launch` failure with `Executable doesn't exist` after a bare `npx playwright install chromium` can mean that the command installed the Chromium build of another Playwright version.
 Run the commands of that section instead.
 
-If the install command fails with `Playwright does not support chromium on <platform>`, that Playwright version is older than your operating system.
-Set `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` to the closest platform that it supports, for example `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` on Ubuntu 26.04, and run the install command again.
+If the install command fails with `Playwright does not support chromium on <platform>`, that Playwright version has no Chromium build for your platform.
+When the platform is newer than that Playwright version, the build for an older release of the same operating system can work.
+Set `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` for the install command, for example `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` on Ubuntu 26.04 with Playwright 1.60.0.
 
 If your environment uses a custom browser cache, expose it with `PLAYWRIGHT_BROWSERS_PATH` and rerun:
 
